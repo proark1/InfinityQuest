@@ -19,12 +19,16 @@ import {
   ADRENALINE_MAX,
   HISTORY_CONTEXT_WINDOW,
   HUNGER_THIRST_MAX,
+  MANA_PER_INT_POINT,
+  MANA_REGEN_PER_TURN_PCT,
   REPUTATION_MAX,
   REPUTATION_MIN,
   REPUTATION_STATUS,
+  TRAVEL_EVENT_CHANCE,
   clamp,
   newId,
 } from '../utils/constants';
+import { actionLooksLikeTravel, pickTravelEvent } from '../utils/randomEvents';
 
 interface UseGameTurnArgs {
   gameState: GameState;
@@ -86,6 +90,22 @@ export function useGameTurn({
       SoundManager.playClick();
       setLoading(true);
 
+      // If the player is clearly travelling and we aren't in combat/merchant, occasionally inject a travel event.
+      let eventOverride: string | undefined;
+      if (
+        !isInitial &&
+        !systemOverride &&
+        !current.activeEnemy &&
+        !current.activeMerchant &&
+        actionLooksLikeTravel(userAction) &&
+        Math.random() < TRAVEL_EVENT_CHANCE
+      ) {
+        const ev = pickTravelEvent({ currentAct: current.currentAct, reputation: current.reputation });
+        if (ev) {
+          eventOverride = `TRAVEL EVENT [${ev.id}]: ${ev.prompt} Weave it into the player's current action naturally.`;
+        }
+      }
+
       const historyWithUser = [...current.history];
       if (!isInitial && !systemOverride) {
         historyWithUser.push({ id: newId(), role: 'user', text: userAction });
@@ -98,7 +118,7 @@ export function useGameTurn({
             .slice(-HISTORY_CONTEXT_WINDOW)
             .map(t => `${t.role === 'user' ? 'Player' : 'Master'}: ${t.text}`)
             .join('\n'),
-          systemOverride || userAction,
+          eventOverride ? `${eventOverride}\n\n${systemOverride || userAction}` : (systemOverride || userAction),
           current.inventory,
           current.currentQuest,
           current.stats,
@@ -121,6 +141,11 @@ export function useGameTurn({
           current.activeMerchant,
           current.currentHp,
           current.maxHp,
+          current.currentMana,
+          current.maxMana,
+          current.abilities,
+          current.abilityCooldowns,
+          current.equipped,
         );
 
         if (aiResponse.worldRoll) {
@@ -254,6 +279,24 @@ export function useGameTurn({
           if (starvationDamage > 0) {
             addFloatingText(`-${starvationDamage} HP (${newHunger === 0 && newThirst === 0 ? 'starving/parched' : newHunger === 0 ? 'starving' : 'parched'})`, 'damage');
             SoundManager.playDamage();
+          }
+
+          // Recompute maxMana off (possibly updated) INT; regenerate a chunk each turn.
+          const newStats = nextState.stats;
+          const newMaxMana = Math.max(0, newStats.intelligence * MANA_PER_INT_POINT);
+          const regenAmount = Math.ceil((newMaxMana * MANA_REGEN_PER_TURN_PCT) / 100);
+          nextState.maxMana = newMaxMana;
+          nextState.currentMana = clamp(prev.currentMana + regenAmount, 0, newMaxMana);
+
+          // Tick cooldowns down by 1 on real-time turns.
+          if (timePasses && prev.abilityCooldowns) {
+            const nextCooldowns: Record<string, number> = {};
+            Object.entries(prev.abilityCooldowns).forEach(([name, turns]) => {
+              if (turns > 1) nextCooldowns[name] = turns - 1;
+            });
+            nextState.abilityCooldowns = nextCooldowns;
+          } else {
+            nextState.abilityCooldowns = prev.abilityCooldowns || {};
           }
 
           if (aiResponse.newAbilities && aiResponse.newAbilities.length > 0) {

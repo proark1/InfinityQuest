@@ -1,18 +1,22 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { InventoryItem, SPELLBOOK_DATA } from '../types';
+import { EquippedLoadout, InventoryItem, SPELLBOOK_DATA } from '../types';
 import { generateItemDetails } from '../services/geminiService';
-import { X, Sparkles, Package, Loader, BookOpen, Wand2, Zap, Flame, Snowflake, Utensils } from 'lucide-react';
+import { X, Sparkles, Package, Loader, BookOpen, Wand2, Zap, Flame, Snowflake, Utensils, Swords } from 'lucide-react';
 import { SoundManager } from '../utils/soundEffects';
+import { inferSlot, isEquipped } from '../utils/equipment';
 
 interface ItemInspectorProps {
   item: InventoryItem | null;
   onClose: () => void;
   onConsume?: (item: InventoryItem) => void;
   onDetailsLoaded?: (itemName: string, details: { lore?: string; imageUrl?: string }) => void;
+  onEquip?: (item: InventoryItem) => void;
+  onUnequip?: (item: InventoryItem) => void;
+  equipped?: EquippedLoadout;
 }
 
-const ItemInspector: React.FC<ItemInspectorProps> = ({ item, onClose, onConsume, onDetailsLoaded }) => {
+const ItemInspector: React.FC<ItemInspectorProps> = ({ item, onClose, onConsume, onDetailsLoaded, onEquip, onUnequip, equipped }) => {
   const [details, setDetails] = useState<{ lore: string; imageUrl: string | null } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -165,6 +169,39 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({ item, onClose, onConsume,
                        <span className="text-slate-300 text-xl font-black">{item.type}</span>
                     </div>
                  </div>
+
+                 {!item.consumable && onEquip && equipped && inferSlot(item) && (
+                    <div className="w-full space-y-3">
+                       <div className="flex items-center justify-center gap-3 text-[10px] font-black uppercase tracking-[0.3em] text-amber-400">
+                          <Swords size={14} />
+                          Equipment ({inferSlot(item)})
+                       </div>
+                       {item.stats && (
+                          <div className="flex justify-center gap-2 flex-wrap">
+                             {Object.entries(item.stats).map(([k, v]) => (
+                                <span key={k} className="px-3 py-1.5 bg-amber-950/40 border border-amber-700/40 text-amber-300 text-xs font-bold rounded-full uppercase">
+                                   {v! > 0 ? '+' : ''}{v} {k.slice(0, 3)}
+                                </span>
+                             ))}
+                          </div>
+                       )}
+                       {isEquipped(item, equipped) ? (
+                          <button
+                             onClick={() => { onUnequip?.(item); onClose(); }}
+                             className="w-full py-4 bg-slate-700 hover:bg-slate-600 text-slate-100 font-black uppercase tracking-widest rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center gap-2"
+                          >
+                             <Swords size={18} /> Unequip
+                          </button>
+                       ) : (
+                          <button
+                             onClick={() => { onEquip(item); onClose(); }}
+                             className="w-full py-4 bg-amber-600 hover:bg-amber-500 text-white font-black uppercase tracking-widest rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center gap-2"
+                          >
+                             <Swords size={18} /> Equip
+                          </button>
+                       )}
+                    </div>
+                 )}
 
                  {item.consumable && onConsume && (
                     <div className="w-full space-y-3">

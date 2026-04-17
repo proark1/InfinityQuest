@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { GameState, Language, ItemRarity, InventoryItem } from '../types';
-import { Backpack, BicepsFlexed, Brain, Activity, Trophy, Zap, Sword, Book, MapPin, Skull, Heart, Hammer, Sparkles, Utensils, Droplets, Flame, Coins, Medal, Flag, User, Eye } from 'lucide-react';
+import { Backpack, BicepsFlexed, Brain, Activity, Trophy, Zap, Sword, Book, MapPin, Skull, Heart, Hammer, Sparkles, Utensils, Droplets, Flame, Coins, Medal, Flag, User, Eye, Shield, Gem } from 'lucide-react';
 import { SoundManager } from '../utils/soundEffects';
 
 interface SidebarProps {
@@ -110,11 +110,27 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, className = '', language, 
                  <div className="text-[9px] font-black text-slate-100">{gameState.currentHp} / {gameState.maxHp}</div>
               </div>
               <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700 p-0.5">
-                 <div 
+                 <div
                    className="h-full bg-gradient-to-r from-red-800 to-red-400 rounded-full transition-all duration-700 shadow-[0_0_8px_rgba(239,68,68,0.2)]"
                    style={{ width: `${hpPercentage}%` }}
                  />
               </div>
+              {gameState.maxMana > 0 && (
+                <div className="mt-2">
+                   <div className="flex justify-between items-end mb-1">
+                      <div className="flex items-center gap-1 text-indigo-400 font-black uppercase text-[8px] tracking-[0.1em]">
+                         <Zap size={8} fill="currentColor" /> Mana
+                      </div>
+                      <div className="text-[9px] font-black text-slate-100">{gameState.currentMana} / {gameState.maxMana}</div>
+                   </div>
+                   <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700 p-0.5">
+                      <div
+                        className="h-full bg-gradient-to-r from-indigo-800 to-indigo-400 rounded-full transition-all duration-700 shadow-[0_0_8px_rgba(99,102,241,0.2)]"
+                        style={{ width: `${gameState.maxMana ? (gameState.currentMana / gameState.maxMana) * 100 : 0}%` }}
+                      />
+                   </div>
+                </div>
+              )}
               <div className="flex flex-wrap gap-1 mt-1">
                  {gameState.statusEffects.map((eff, i) => (
                     <div key={i} className="p-0.5 px-1 bg-slate-950 rounded border border-slate-700 flex items-center gap-1 text-[10px] font-black text-amber-500 uppercase">
@@ -180,6 +196,17 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, className = '', language, 
               <StatBox label="INT" value={gameState.stats.intelligence} icon={<Brain size={14}/>} color="text-blue-400" />
               <StatBox label="STA" value={gameState.stats.stamina} icon={<Activity size={14}/>} color="text-green-400" />
               <StatBox label="CHA" value={gameState.stats.charisma} icon={<Coins size={14}/>} color="text-purple-400" />
+            </div>
+
+            <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 space-y-2">
+               <div className="flex items-center justify-center gap-2 text-amber-400 text-[8px] font-black uppercase tracking-widest border-b border-amber-900/20 pb-1.5">
+                  <Sword size={14} /> Equipped
+               </div>
+               <div className="grid grid-cols-3 gap-1.5 mt-2">
+                  <EquipSlotBox label="Weapon" name={gameState.equipped?.weapon} icon={<Sword size={14} />} />
+                  <EquipSlotBox label="Armor" name={gameState.equipped?.armor} icon={<Shield size={14} />} />
+                  <EquipSlotBox label="Trinket" name={gameState.equipped?.trinket} icon={<Gem size={14} />} />
+               </div>
             </div>
 
             {gameState.location && (
@@ -376,6 +403,16 @@ const StatBox: React.FC<{ label: string, value: number, icon: React.ReactNode, c
       <div className={`${color} group-hover:scale-125 transition-transform duration-500`}>{icon}</div>
       <div className="text-[7px] font-black text-slate-500 uppercase tracking-widest">{label}</div>
       <div className="text-lg font-black text-white leading-none">{value}</div>
+   </div>
+);
+
+const EquipSlotBox: React.FC<{ label: string; name?: string; icon: React.ReactNode }> = ({ label, name, icon }) => (
+   <div className={`p-2 rounded-lg border ${name ? 'bg-amber-950/20 border-amber-700/40' : 'bg-slate-900 border-slate-800'} flex flex-col items-center justify-center gap-1 text-center`}>
+      <div className={name ? 'text-amber-400' : 'text-slate-600'}>{icon}</div>
+      <div className="text-[7px] font-black text-slate-500 uppercase tracking-widest">{label}</div>
+      <div className={`text-[9px] font-bold leading-tight truncate w-full ${name ? 'text-slate-200' : 'text-slate-700 italic'}`}>
+         {name || 'empty'}
+      </div>
    </div>
 );
 

@@ -10,13 +10,20 @@ export interface ConsumableEffect {
 export interface InventoryItem {
   name: string;
   rarity: ItemRarity;
-  type: string; // e.g., Weapon, Armor, Material, Spellbook, Food, Drink, Potion
+  type: string; // e.g., Weapon, Armor, Material, Spellbook, Food, Drink, Potion, Trinket
   description?: string;
   value?: number; // Gold value
   lore?: string; // Generated on inspection
   imageUrl?: string; // Generated on inspection
   consumable?: ConsumableEffect; // If set, item can be eaten/drunk/used to restore the listed stats
+  stats?: Partial<CharacterStats>; // Stat bonuses applied while equipped (Weapon/Armor/Trinket only)
 }
+
+export type EquipSlot = 'weapon' | 'armor' | 'trinket';
+
+export type EquippedLoadout = {
+  [K in EquipSlot]?: string; // item name currently equipped in this slot
+};
 
 export interface Spell {
   name: string;
@@ -52,6 +59,9 @@ export interface Ability {
   name: string;
   description: string;
   icon?: string;
+  type?: 'passive' | 'active' | 'spell';
+  manaCost?: number;
+  cooldown?: number; // in turns
 }
 
 export interface Companion {
@@ -218,6 +228,10 @@ export interface GameState {
   thirst: number; // 0-100 (0 = Dehydration)
   
   abilities: Ability[];
+  abilityCooldowns: Record<string, number>; // ability name -> turns remaining
+  currentMana: number;
+  maxMana: number;
+  equipped: EquippedLoadout;
   codex: CodexEntry[];
   portraitUrl?: string;
   companion?: Companion;

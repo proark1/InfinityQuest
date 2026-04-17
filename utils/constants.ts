@@ -16,6 +16,19 @@ export const INITIAL_HP = 20;
 export const SANCTUARY_UPGRADE_BASE_COST = 200;
 export const HISTORY_CONTEXT_WINDOW = 20;
 
+export const MANA_PER_INT_POINT = 5;
+export const MANA_REGEN_PER_TURN_PCT = 10; // % of maxMana regenerated each turn
+export const DEFAULT_ABILITY_MANA_COST = 10;
+export const DEFAULT_ABILITY_COOLDOWN = 2;
+
+export const REST_HP_RESTORE_PCT = 50;
+export const REST_HUNGER_COST = 20;
+export const REST_THIRST_COST = 20;
+export const REST_NIGHT_ENCOUNTER_CHANCE = 0.25;
+
+export const TRAVEL_EVENT_CHANCE = 0.4;
+export const TRAVEL_KEYWORDS = ['walk', 'travel', 'ride', 'continue', 'journey', 'head ', 'go to', 'march', 'move on', 'set out', 'trek'];
+
 export const DEFAULT_STATS: CharacterStats = {
   strength: 10,
   intelligence: 10,
@@ -56,6 +69,10 @@ export const INITIAL_GAME_STATE: GameState = {
   hunger: HUNGER_THIRST_MAX,
   thirst: HUNGER_THIRST_MAX,
   abilities: [],
+  abilityCooldowns: {},
+  currentMana: 0,
+  maxMana: DEFAULT_STATS.intelligence * MANA_PER_INT_POINT,
+  equipped: {},
   playerClass: 'Traveler',
   title: 'Novice',
   codex: [],

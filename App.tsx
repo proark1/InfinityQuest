@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  Ability,
   AppSettings,
   CharacterStats,
   ImageSize,
@@ -26,13 +27,22 @@ import VisualEffectsLayer from './components/VisualEffectsLayer';
 import LivingBackground from './components/LivingBackground';
 import MinigameDice from './components/MinigameDice';
 import ItemInspector from './components/ItemInspector';
+import CampModal from './components/CampModal';
+import AbilityHotbar from './components/AbilityHotbar';
+import { effectiveStats, inferSlot } from './utils/equipment';
 import { SoundManager } from './utils/soundEffects';
 import { checkApiKey, generateAudio, isAiStudioAvailable, requestApiKey } from './services/geminiService';
 import { setApiKey as saveApiKey } from './utils/apiKey';
 import { AlertTriangle, Menu, Mic, Send, Settings } from 'lucide-react';
 import {
+  DEFAULT_ABILITY_COOLDOWN,
+  DEFAULT_ABILITY_MANA_COST,
   HUNGER_THIRST_MAX,
   INITIAL_HP,
+  REST_HP_RESTORE_PCT,
+  REST_HUNGER_COST,
+  REST_NIGHT_ENCOUNTER_CHANCE,
+  REST_THIRST_COST,
   SANCTUARY_UPGRADE_BASE_COST,
   clamp,
   newId,
@@ -54,6 +64,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [liveSessionOpen, setLiveSessionOpen] = useState<boolean>(false);
   const [showDiceGame, setShowDiceGame] = useState(false);
+  const [showCampModal, setShowCampModal] = useState(false);
   const [inspectItem, setInspectItem] = useState<InventoryItem | null>(null);
   const [showClassSelection, setShowClassSelection] = useState<boolean>(false);
   const [showPantheon, setShowPantheon] = useState<boolean>(false);
@@ -117,7 +128,8 @@ function App() {
   const handleRollComplete = useCallback((roll: number) => {
     if (activeSkillCheck) {
       const attribute = activeSkillCheck.attribute || 'strength';
-      const modifier = Math.floor((gameState.stats[attribute] - 10) / 2);
+      const effStats = effectiveStats(gameState.stats, gameState.inventory, gameState.equipped);
+      const modifier = Math.floor((effStats[attribute] - 10) / 2);
       const success = roll + modifier >= (activeSkillCheck.difficultyClass || 10);
       const dc = activeSkillCheck.difficultyClass;
       setActiveSkillCheck(null);
@@ -157,6 +169,84 @@ function App() {
     }));
   }, [setGameState]);
 
+  const handleEquip = useCallback((item: InventoryItem) => {
+    const slot = inferSlot(item);
+    if (!slot) return;
+    SoundManager.playConfirm();
+    setGameState(prev => ({
+      ...prev,
+      equipped: { ...prev.equipped, [slot]: item.name },
+    }));
+    addFloatingText(`Equipped: ${item.name}`, 'info');
+  }, [addFloatingText, setGameState]);
+
+  const handleUnequip = useCallback((item: InventoryItem) => {
+    const slot = inferSlot(item);
+    if (!slot) return;
+    SoundManager.playClick();
+    setGameState(prev => {
+      const nextEquipped = { ...prev.equipped };
+      if (nextEquipped[slot] === item.name) delete nextEquipped[slot];
+      return { ...prev, equipped: nextEquipped };
+    });
+    addFloatingText(`Unequipped: ${item.name}`, 'info');
+  }, [addFloatingText, setGameState]);
+
+  const handleCast = useCallback((ability: Ability) => {
+    const cost = ability.type === 'spell' ? (ability.manaCost ?? DEFAULT_ABILITY_MANA_COST) : 0;
+    if (cost > gameState.currentMana) {
+      addFloatingText('Not enough mana', 'info');
+      return;
+    }
+    if ((gameState.abilityCooldowns[ability.name] || 0) > 0) return;
+
+    const cooldown = ability.cooldown ?? DEFAULT_ABILITY_COOLDOWN;
+
+    setGameState(prev => ({
+      ...prev,
+      currentMana: clamp(prev.currentMana - cost, 0, prev.maxMana),
+      abilityCooldowns: { ...prev.abilityCooldowns, [ability.name]: cooldown },
+    }));
+
+    if (cost > 0) addFloatingText(`-${cost} MP`, 'info');
+
+    const override = `ABILITY USE: The player activates "${ability.name}" — ${ability.description}. Type: ${ability.type || 'active'}. Mana cost already spent, cooldown already set. Resolve this ability: if offensive or risky, return a skillCheck (use INT for spells, STR for physical, STA for sustained). If utility/heal/buff, narrate the effect and apply concrete stat changes (hpChange, statusEffects) in this response. Reference the spell/ability by name.`;
+    processTurn(`I use ${ability.name}.`, false, override);
+  }, [addFloatingText, gameState.abilityCooldowns, gameState.currentMana, processTurn, setGameState]);
+
+  const handleCamp = useCallback((foodName: string, drinkName: string) => {
+    SoundManager.playConfirm();
+    setShowCampModal(false);
+    const nightEncounter = Math.random() < REST_NIGHT_ENCOUNTER_CHANCE;
+
+    setGameState(prev => {
+      const inv = [...prev.inventory];
+      const foodIdx = inv.findIndex(i => i.name === foodName);
+      if (foodIdx >= 0) inv.splice(foodIdx, 1);
+      const drinkIdx = inv.findIndex(i => i.name === drinkName);
+      if (drinkIdx >= 0) inv.splice(drinkIdx, 1);
+
+      const hpRestore = Math.floor(prev.maxHp * (REST_HP_RESTORE_PCT / 100));
+      return {
+        ...prev,
+        inventory: inv,
+        currentHp: clamp(prev.currentHp + hpRestore, 0, prev.maxHp),
+        hunger: clamp(prev.hunger + REST_HUNGER_COST, 0, HUNGER_THIRST_MAX),
+        thirst: clamp(prev.thirst + REST_THIRST_COST, 0, HUNGER_THIRST_MAX),
+        currentMana: prev.maxMana,
+        abilityCooldowns: {},
+      };
+    });
+
+    addFloatingText('Rested', 'heal');
+
+    const override = nightEncounter
+      ? `The player is making camp for the night. Consumed: ${foodName} and ${drinkName}. Roughly 4 hours pass. HP, mana, and cooldowns have been restored. However, a DISTURBANCE breaks the night — an ambush, a wandering beast, a stranger, or an ill omen. Narrate the disturbance and what the player sees. Present it as a choice or trigger a skillCheck/combat if appropriate.`
+      : `The player is making camp for the night. Consumed: ${foodName} and ${drinkName}. Roughly 4 hours pass quietly. HP, mana, and cooldowns have been restored. Narrate the restful night in 2-3 sentences and what the morning reveals.`;
+
+    processTurn('I set up camp and rest.', false, override);
+  }, [addFloatingText, processTurn, setGameState]);
+
   const handleConsume = useCallback((item: InventoryItem) => {
     if (!item.consumable) return;
     const { hungerRestore = 0, thirstRestore = 0, hpRestore = 0 } = item.consumable;
@@ -166,9 +256,14 @@ function App() {
       const nextInventory = idx >= 0
         ? [...prev.inventory.slice(0, idx), ...prev.inventory.slice(idx + 1)]
         : prev.inventory;
+      const nextEquipped = { ...prev.equipped };
+      (Object.keys(nextEquipped) as Array<keyof typeof nextEquipped>).forEach(slot => {
+        if (nextEquipped[slot] === item.name) delete nextEquipped[slot];
+      });
       return {
         ...prev,
         inventory: nextInventory,
+        equipped: nextEquipped,
         hunger: clamp(prev.hunger + hungerRestore, 0, HUNGER_THIRST_MAX),
         thirst: clamp(prev.thirst + thirstRestore, 0, HUNGER_THIRST_MAX),
         currentHp: clamp(prev.currentHp + hpRestore, 0, prev.maxHp),
@@ -288,7 +383,16 @@ function App() {
                  gameState={gameState}
                  onAction={processTurn}
                  onPlayDice={() => setShowDiceGame(true)}
+                 onMakeCamp={() => setShowCampModal(true)}
                  disabled={loading}
+              />
+
+              <AbilityHotbar
+                 abilities={gameState.abilities}
+                 cooldowns={gameState.abilityCooldowns}
+                 currentMana={gameState.currentMana}
+                 onCast={handleCast}
+                 disabled={loading || !!activeSkillCheck || !!activeWorldRoll}
               />
 
               <div className="bg-slate-900 border-t border-slate-800 p-4 z-10">
@@ -475,7 +579,7 @@ function App() {
       {activeSkillCheck && (
         <DiceRoller
           check={activeSkillCheck}
-          modifier={Math.floor(((gameState.stats[activeSkillCheck.attribute] || 10) - 10) / 2)}
+          modifier={Math.floor(((effectiveStats(gameState.stats, gameState.inventory, gameState.equipped)[activeSkillCheck.attribute] || 10) - 10) / 2)}
           onRollComplete={handleRollComplete}
         />
       )}
@@ -501,8 +605,17 @@ function App() {
           onClose={() => setInspectItem(null)}
           onConsume={handleConsume}
           onDetailsLoaded={handleItemDetailsLoaded}
+          onEquip={handleEquip}
+          onUnequip={handleUnequip}
+          equipped={gameState.equipped}
         />
       )}
+      <CampModal
+        isOpen={showCampModal}
+        onClose={() => setShowCampModal(false)}
+        inventory={gameState.inventory}
+        onConfirm={handleCamp}
+      />
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} settings={settings} onSettingsChange={setSettings} onNewGame={() => { setSettingsOpen(false); resetGame(); }} />
       <GameOverModal
         isOpen={gameState.isGameOver}

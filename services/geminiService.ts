@@ -83,6 +83,23 @@ Say "no" when the world says "no". The player's fun comes from constraints, not 
    - worldRoll: events the player does NOT control ("the ceiling groans..."). Provide label; leave result undefined so the dice decides.
    - Never trigger rolls on welcome, exposition, or pure dialogue turns.
 
+11) ABILITIES, MANA, COOLDOWNS.
+    - When granting abilities via newAbilities, always set: type ("passive" | "active" | "spell"), and for non-passives include manaCost (spells: 10-40) and cooldown (2-5 turns).
+    - Passives grant always-on bonuses; narrate them when relevant but don't trigger on their own.
+    - When the player USES an ability (the system override will say "ABILITY USE"), treat it as the intent; mana/cooldown are already spent client-side.
+    - Reference the ability/spell by name in the narrative so the player knows it landed.
+
+13) TRAVEL EVENTS.
+    - A user message may be prefixed with "TRAVEL EVENT [id]: ..." — this is a setup the client injected, not player input.
+    - Weave the event naturally into the narrative for this turn. Respect the event's intent (combat, merchant, shrine, etc.).
+    - Only fire one worldRoll/skillCheck/combat per turn — don't compound.
+
+12) EQUIPMENT.
+    - Weapons/armor/trinkets can grant stat bonuses via the item's "stats" field (+1 to +4 per stat).
+    - The per-turn prompt shows the equipped loadout AND a "Gear bonus" line summarizing bonuses.
+    - Reference equipped weapons in attack narration ("you draw the rune-etched longsword").
+    - When returning stats changes, return BASE stats only (do NOT include gear bonuses). The client sums them.
+
 10) BRACKETS & VISUALS.
     - Wrap interactable entities in [[double brackets]]: enemies, notable NPCs, objects of interest.
     - Always fill visualPrompt (one evocative sentence, cinematic).
@@ -118,6 +135,11 @@ interface TurnPromptArgs {
   activeMerchant: Merchant | undefined;
   maxHp: number;
   currentHp: number;
+  currentMana: number;
+  maxMana: number;
+  abilities: { name: string; description: string; type?: string; manaCost?: number; cooldown?: number }[];
+  abilityCooldowns: Record<string, number>;
+  equipped: { weapon?: string; armor?: string; trinket?: string };
 }
 
 const buildTurnPrompt = (a: TurnPromptArgs): string => {
@@ -136,12 +158,45 @@ const buildTurnPrompt = (a: TurnPromptArgs): string => {
     ? `Sanctuary: lib ${a.sanctuary.libraryLevel} · armory ${a.sanctuary.armoryLevel} · garden ${a.sanctuary.gardenLevel} · treasury ${a.sanctuary.treasuryLevel}`
     : '';
 
+  const equippedLine = [
+    a.equipped.weapon ? `Weapon: ${a.equipped.weapon}` : null,
+    a.equipped.armor ? `Armor: ${a.equipped.armor}` : null,
+    a.equipped.trinket ? `Trinket: ${a.equipped.trinket}` : null,
+  ].filter(Boolean).join(' · ') || '(none equipped)';
+
+  const gearBonus: Partial<CharacterStats> = {};
+  (['weapon', 'armor', 'trinket'] as const).forEach(slot => {
+    const name = a.equipped[slot];
+    if (!name) return;
+    const item = a.inventory.find(i => i.name === name);
+    if (!item?.stats) return;
+    (Object.keys(item.stats) as (keyof CharacterStats)[]).forEach(k => {
+      const bonus = item.stats![k];
+      if (typeof bonus === 'number') gearBonus[k] = (gearBonus[k] || 0) + bonus;
+    });
+  });
+  const gearLine = Object.keys(gearBonus).length
+    ? Object.entries(gearBonus).map(([k, v]) => `${v! > 0 ? '+' : ''}${v} ${k.toUpperCase().slice(0, 3)}`).join(' · ')
+    : '(no gear bonuses)';
+
+  const abilitiesLine = a.abilities.length
+    ? a.abilities.map(ab => {
+        const cd = a.abilityCooldowns[ab.name] || 0;
+        const readiness = cd > 0 ? ` [cd:${cd}]` : '';
+        const cost = ab.manaCost ? ` (${ab.manaCost}MP)` : '';
+        return `${ab.name}${cost}${readiness}`;
+      }).join(', ')
+    : '(none yet)';
+
   return `PLAYER ACTION: ${a.userAction}
 
 --- CHARACTER ---
 Class: ${a.playerClass} | Level: ${a.level} (${a.currentXp}/${a.nextLevelXp} XP) | Act: ${a.currentAct} (${a.actProgress}%) | Ascension: ${a.ascensionLevel}
-HP: ${a.currentHp}/${a.maxHp} | Hunger: ${a.hunger}/100 | Thirst: ${a.thirst}/100
+HP: ${a.currentHp}/${a.maxHp} | Mana: ${a.currentMana}/${a.maxMana} | Hunger: ${a.hunger}/100 | Thirst: ${a.thirst}/100
 STR: ${stats.strength} (${statMod(stats.strength)}) · INT: ${stats.intelligence} (${statMod(stats.intelligence)}) · STA: ${stats.stamina} (${statMod(stats.stamina)}) · CHA: ${stats.charisma} (${statMod(stats.charisma)})
+Equipped: ${equippedLine}
+Gear bonus: ${gearLine}
+Abilities: ${abilitiesLine}
 Blessings: ${blessings}
 ${sanctuaryLine}
 
@@ -188,7 +243,12 @@ export const generateStoryTurn = async (
   currentLocation: LocationInfo | undefined,
   activeMerchant: Merchant | undefined,
   currentHp: number,
-  maxHp: number
+  maxHp: number,
+  currentMana: number,
+  maxMana: number,
+  abilities: { name: string; description: string; type?: string; manaCost?: number; cooldown?: number }[],
+  abilityCooldowns: Record<string, number>,
+  equipped: { weapon?: string; armor?: string; trinket?: string }
 ): Promise<AIResponse> => {
   const ai = getAIClient();
   const modelName = String(settings?.textModel || TextModel.Pro);
@@ -216,6 +276,11 @@ export const generateStoryTurn = async (
     activeMerchant,
     maxHp,
     currentHp,
+    currentMana,
+    maxMana,
+    abilities,
+    abilityCooldowns,
+    equipped,
   });
 
   const systemInstruction = getSystemInstruction(settings.language);
@@ -247,6 +312,15 @@ export const generateStoryTurn = async (
                       hungerRestore: { type: Type.NUMBER },
                       thirstRestore: { type: Type.NUMBER },
                       hpRestore: { type: Type.NUMBER }
+                    }
+                  },
+                  stats: {
+                    type: Type.OBJECT,
+                    properties: {
+                      strength: { type: Type.NUMBER },
+                      intelligence: { type: Type.NUMBER },
+                      stamina: { type: Type.NUMBER },
+                      charisma: { type: Type.NUMBER }
                     }
                   }
                 },
@@ -310,6 +384,7 @@ export const generateStoryTurn = async (
                   name: { type: Type.STRING },
                   description: { type: Type.STRING },
                   type: { type: Type.STRING, enum: ["passive", "active", "spell"] },
+                  manaCost: { type: Type.NUMBER },
                   cooldown: { type: Type.NUMBER }
                 },
                 required: ["name", "description", "type"]

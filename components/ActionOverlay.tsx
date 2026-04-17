@@ -1,17 +1,18 @@
 
 import React from 'react';
 import { GameState } from '../types';
-import { Sword, Shield, Footprints, Heart, ShoppingBag, ArrowRight, X, Flame, Dices } from 'lucide-react';
+import { Sword, Shield, Footprints, Heart, ShoppingBag, ArrowRight, X, Flame, Dices, Moon } from 'lucide-react';
 import { SoundManager } from '../utils/soundEffects';
 
 interface ActionOverlayProps {
   gameState: GameState;
   onAction: (action: string) => void;
   onPlayDice: () => void;
+  onMakeCamp: () => void;
   disabled: boolean;
 }
 
-const ActionOverlay: React.FC<ActionOverlayProps> = ({ gameState, onAction, onPlayDice, disabled }) => {
+const ActionOverlay: React.FC<ActionOverlayProps> = ({ gameState, onAction, onPlayDice, onMakeCamp, disabled }) => {
   if (gameState.isGameOver || gameState.isVictory) return null;
 
   // Ultimate Ability Button (Limit Break)
@@ -141,29 +142,35 @@ const ActionOverlay: React.FC<ActionOverlayProps> = ({ gameState, onAction, onPl
     );
   }
 
-  // Exploration Mode (Use Suggestions)
+  // Exploration Mode (Use Suggestions + Camp)
   const lastTurn = gameState.history[gameState.history.length - 1];
-  if (lastTurn && lastTurn.choices && lastTurn.choices.length > 0) {
-     return (
-        <div className="absolute bottom-24 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
-           <div className="flex flex-wrap gap-2 justify-center max-w-4xl pointer-events-auto">
-              {lastTurn.choices.map((choice, idx) => (
-                 <button
-                    key={idx}
-                    onClick={() => { SoundManager.playClick(); onAction(choice); }}
-                    onMouseEnter={() => SoundManager.playHover()}
-                    disabled={disabled}
-                    className="bg-slate-900/90 backdrop-blur border border-slate-600 hover:border-amber-500 text-slate-200 px-5 py-3 rounded-full shadow-lg transition-all hover:scale-105 active:scale-95 text-sm font-medium flex items-center gap-2 group"
-                 >
-                    {choice} <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity -ml-2 group-hover:ml-0" />
-                 </button>
-              ))}
-           </div>
+  const choices = lastTurn && lastTurn.choices ? lastTurn.choices : [];
+  return (
+     <div className="absolute bottom-24 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
+        <div className="flex flex-wrap gap-2 justify-center max-w-4xl pointer-events-auto">
+           {choices.map((choice, idx) => (
+              <button
+                 key={idx}
+                 onClick={() => { SoundManager.playClick(); onAction(choice); }}
+                 onMouseEnter={() => SoundManager.playHover()}
+                 disabled={disabled}
+                 className="bg-slate-900/90 backdrop-blur border border-slate-600 hover:border-amber-500 text-slate-200 px-5 py-3 rounded-full shadow-lg transition-all hover:scale-105 active:scale-95 text-sm font-medium flex items-center gap-2 group"
+              >
+                 {choice} <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity -ml-2 group-hover:ml-0" />
+              </button>
+           ))}
+           <button
+              onClick={() => { SoundManager.playClick(); onMakeCamp(); }}
+              onMouseEnter={() => SoundManager.playHover()}
+              disabled={disabled}
+              aria-label="Make camp and rest"
+              className="bg-amber-950/80 backdrop-blur border border-amber-700/50 hover:border-amber-500 text-amber-300 hover:text-amber-200 px-5 py-3 rounded-full shadow-lg transition-all hover:scale-105 active:scale-95 text-sm font-medium flex items-center gap-2"
+           >
+              <Moon size={14} /> Make Camp
+           </button>
         </div>
-     );
-  }
-
-  return null;
+     </div>
+  );
 };
 
 export default ActionOverlay;
