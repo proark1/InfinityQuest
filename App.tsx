@@ -146,6 +146,17 @@ function App() {
     setGameState(prev => ({ ...prev, gold: Math.max(0, prev.gold + netGold) }));
   }, [setGameState]);
 
+  const handleItemDetailsLoaded = useCallback((itemName: string, details: { lore?: string; imageUrl?: string }) => {
+    setGameState(prev => ({
+      ...prev,
+      inventory: prev.inventory.map(i =>
+        i.name === itemName
+          ? { ...i, lore: details.lore ?? i.lore, imageUrl: details.imageUrl ?? i.imageUrl }
+          : i,
+      ),
+    }));
+  }, [setGameState]);
+
   const handleConsume = useCallback((item: InventoryItem) => {
     if (!item.consumable) return;
     const { hungerRestore = 0, thirstRestore = 0, hpRestore = 0 } = item.consumable;
@@ -484,7 +495,14 @@ function App() {
          />
       )}
 
-      {inspectItem && <ItemInspector item={inspectItem} onClose={() => setInspectItem(null)} onConsume={handleConsume} />}
+      {inspectItem && (
+        <ItemInspector
+          item={inspectItem}
+          onClose={() => setInspectItem(null)}
+          onConsume={handleConsume}
+          onDetailsLoaded={handleItemDetailsLoaded}
+        />
+      )}
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} settings={settings} onSettingsChange={setSettings} onNewGame={() => { setSettingsOpen(false); resetGame(); }} />
       <GameOverModal
         isOpen={gameState.isGameOver}

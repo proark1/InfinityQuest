@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { InventoryItem, SPELLBOOK_DATA } from '../types';
 import { generateItemDetails } from '../services/geminiService';
 import { X, Sparkles, Package, Loader, BookOpen, Wand2, Zap, Flame, Snowflake, Utensils } from 'lucide-react';
@@ -9,26 +9,44 @@ interface ItemInspectorProps {
   item: InventoryItem | null;
   onClose: () => void;
   onConsume?: (item: InventoryItem) => void;
+  onDetailsLoaded?: (itemName: string, details: { lore?: string; imageUrl?: string }) => void;
 }
 
-const ItemInspector: React.FC<ItemInspectorProps> = ({ item, onClose, onConsume }) => {
+const ItemInspector: React.FC<ItemInspectorProps> = ({ item, onClose, onConsume, onDetailsLoaded }) => {
   const [details, setDetails] = useState<{ lore: string; imageUrl: string | null } | null>(null);
   const [loading, setLoading] = useState(false);
 
   // Identify if this is the special Mage spellbook
   const isSpellbook = item?.type === "Spellbook";
 
+  const onDetailsLoadedRef = useRef(onDetailsLoaded);
+  onDetailsLoadedRef.current = onDetailsLoaded;
+
   useEffect(() => {
-    if (item && !isSpellbook) {
-      setLoading(true);
-      generateItemDetails(item).then(res => {
-         setDetails(res);
-         setLoading(false);
-         SoundManager.playLoot(item.rarity);
-      });
-    } else {
+    if (!item || isSpellbook) {
       setDetails(null);
+      return;
     }
+
+    // If the item already has generated lore and image, use them instantly.
+    if (item.lore && item.imageUrl) {
+      setDetails({ lore: item.lore, imageUrl: item.imageUrl });
+      setLoading(false);
+      return;
+    }
+
+    // Otherwise fetch, then persist back to the inventory so it's cached next time.
+    setLoading(true);
+    setDetails({ lore: item.lore || '', imageUrl: item.imageUrl || null });
+    generateItemDetails(item).then(res => {
+       setDetails(res);
+       setLoading(false);
+       SoundManager.playLoot(item.rarity);
+       onDetailsLoadedRef.current?.(item.name, {
+         lore: res.lore,
+         imageUrl: res.imageUrl || undefined,
+       });
+    });
   }, [item, isSpellbook]);
 
   if (!item) return null;
