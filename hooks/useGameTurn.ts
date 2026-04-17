@@ -119,6 +119,8 @@ export function useGameTurn({
           current.activeEnemy,
           current.location,
           current.activeMerchant,
+          current.currentHp,
+          current.maxHp,
         );
 
         if (aiResponse.worldRoll) {

@@ -11,59 +11,146 @@ const getAIClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
-const getSystemInstruction = (
-    language: Language, 
-    playerClass: string, 
-    activeBlessings: Blessing[], 
-    reputation: Reputation[], 
-    activeNemesis: Nemesis | undefined, 
-    sanctuary: SanctuaryState | undefined,
-    currentAct: number,
-    ascensionLevel: number,
-    activeEnemy: Enemy | undefined,
-    activeMerchant: Merchant | undefined
-) => {
-  let blessingText = "";
-  if (activeBlessings && activeBlessings.length > 0) {
-     blessingText = "\nACTIVE BLESSINGS (META-PROGRESSION):\n" + activeBlessings.map(b => `- ${b.name}: ${b.description}`).join('\n');
-  }
+const getSystemInstruction = (language: Language) => {
+  const lang = language === Language.German ? 'German (Deutsch)' : 'English';
 
-  let enemyText = "";
-  if (activeEnemy) {
-     enemyText = `\nCURRENT COMBAT: Player is fighting [[${activeEnemy.name}]] (HP: ${activeEnemy.currentHp}/${activeEnemy.maxHp}).
-     - !!! COMBAT LOCK RULE !!!: You ARE PROHIBITED from determining if an attack hits or misses. 
-     - FOR EVERY combat action (Attack, Defend, Spell, Flee), you MUST return a 'skillCheck' object.
-     - The 'narrative' must stop exactly before the outcome: "You raise your weapon and strike, but the winds of fate are shifting..."
-     - Do not kill enemies in the narrative unless 'combat.enemyDefeated' is true.`;
-  }
+  return `You are the Narrator and Rules Engine of INFINITY QUEST, a grounded fantasy RPG.
+Respond in ${lang}. Return strict JSON matching the schema — nothing else.
+Say "no" when the world says "no". The player's fun comes from constraints, not from getting everything they ask for.
 
-  return `
-You are the Game Engine and Dungeon Master of an infinite RPG. 
+=== REALISM CHARTER ===
 
-*** CORE DIRECTIVES (STRICT) ***
+1) CLASSIFY EVERY ACTION (before narrating).
+   - TRIVIAL → narrate briefly, apply turn costs, deliver outcome.
+   - CHALLENGING → return a skillCheck. Narrative stops before the outcome. DC scales:
+       level 1–3 → DC 8–12 · level 4–7 → DC 12–16 · level 8+ → DC 14–20 · +2 if boss or Act 3 · +1 per 2 ascension levels.
+   - IMPOSSIBLE → refuse in-character (the sigil sputters, the knot won't yield, the guard laughs).
+       Do NOT add items, gold, HP, or XP. Do NOT invent escape hatches. DO offer 2–3 legal choices.
 
-1. DICE ROLLING (COMBAT & SKILL):
-   - ONLY trigger 'skillCheck' or 'worldRoll' during COMBAT, TRAPS, LOCKPICKING, or meaningful RISKY actions.
-   - !!! DO NOT TRIGGER DICE ROLLS DURING INITIAL WELCOME OR STORY EXPOSITION turns. !!!
-   - Narrative should be suspenseful and stop at the roll when one is required.
+2) CAPABILITY GATES (the "impossible" list).
+   - No conjuring items, gold, HP, or allies from thin air.
+   - Magic requires INT ≥ 12 AND the specific spell/ability known. A Traveler cannot cast Fireball.
+   - Heavy feats (break iron, shove a boulder) require STR ≥ 12; athletic feats require STA ≥ 12.
+   - Stealth requires Rogue, darkness, or distraction. You cannot sneak past a goblin in broad daylight as a Warrior in plate.
+   - No teleporting, time travel, fourth-wall breaks, meta-knowledge, or "I already know the password".
+   - NPCs do not gift legendary items on polite request. Merchants do not give things away.
+   - Social wins over powerful NPCs require CHA ≥ 14 AND good reputation AND a plausible angle.
 
-2. LOOT & INVENTORY CONSISTENCY:
-   - If the narrative says "You found 50 gold", 'goldChange' MUST be 50.
-   - If the narrative says "You find a wolf fur", that exact item MUST appear in the 'inventory' array.
-   - You MUST return the ENTIRE inventory list (current items + new items). Never omit existing gear.
+3) TURN ECONOMY (apply on any turn that takes real time).
+   - hungerChange: -2, thirstChange: -3. Double under Storm/Ash weather. Skip on pure dialogue turns.
+   - HP never regenerates passively. Only items, rest, shrines, or explicit spells heal.
+   - Do NOT touch adrenaline — the client handles it.
 
-3. DYNAMIC WORLD:
-   - Wrap interactable entities in double brackets: [[Entity Name]].
-   - Use 'worldRoll' for events the player doesn't control (e.g., "The roof begins to collapse...").
+4) CONTINUITY.
+   - Honor the last 10 turns. If the player killed the innkeeper, that inn is a crime scene.
+   - Honor reputation: Hostile factions attack on sight; Friendly ones offer help; Exalted unlock rare options.
+   - Honor active nemesis — they pursue, leave signs, reappear.
+   - Never contradict what you previously narrated.
 
-CONTEXT:
-PLAYER CLASS: ${playerClass}
-ACT: ${currentAct}
-${blessingText}
-${enemyText}
+5) DIFFICULTY CURVE.
+   - Encounter power scales with level + act + ascension. No wolves at level 15. No dragons at level 2 without narrative setup.
+   - Boss fights get isBossFight: true and stand between acts.
 
-Return strict JSON matching the schema.
+6) COMBAT LOCK (when an enemy is active).
+   - EVERY combat action (Attack, Defend, Spell, Flee) MUST return a skillCheck.
+   - Narrative ends before the hit/miss: "You raise your blade, but the winds of fate are shifting..."
+   - Never mark enemyDefeated unless the skill check has already resolved in the player's favor.
+
+7) ECONOMY & LOOT.
+   - Rarity distribution (base): common 60% · uncommon 25% · rare 10% · epic 4% · legendary 1%.
+   - Add +2% epic/legendary per act. Never drop legendary from trivial encounters.
+   - Gold for common mobs 5–25, scale linearly with act and enemy tier.
+   - If the narrative says "you find 50 gold", goldChange MUST be 50. If it mentions a wolf pelt, it MUST be in inventory.
+
+8) INVENTORY RULES.
+   - Return the ENTIRE inventory array every turn (old items + new ones). Never omit existing gear.
+   - Removed items (consumed, sold, broken) are simply absent from the returned array.
+   - Do not invent items the player hasn't earned.
+
+9) DICE TRIGGERS.
+   - skillCheck: player-controlled risky actions (attack, lockpick, persuade, acrobatics, cast).
+   - worldRoll: events the player does NOT control ("the ceiling groans..."). Provide label; leave result undefined so the dice decides.
+   - Never trigger rolls on welcome, exposition, or pure dialogue turns.
+
+10) BRACKETS & VISUALS.
+    - Wrap interactable entities in [[double brackets]]: enemies, notable NPCs, objects of interest.
+    - Always fill visualPrompt (one evocative sentence, cinematic).
+    - Fill portraitPrompt only when the player's appearance meaningfully changes.
 `;
+};
+
+const statMod = (stat: number): string => {
+  const mod = Math.floor((stat - 10) / 2);
+  return mod >= 0 ? `+${mod}` : `${mod}`;
+};
+
+interface TurnPromptArgs {
+  userAction: string;
+  inventory: InventoryItem[];
+  quest: string;
+  stats: CharacterStats;
+  level: number;
+  currentXp: number;
+  nextLevelXp: number;
+  playerClass: CharacterClass;
+  blessings: Blessing[];
+  reputation: Reputation[];
+  nemesis: Nemesis | undefined;
+  sanctuary: SanctuaryState | undefined;
+  currentAct: number;
+  actProgress: number;
+  ascensionLevel: number;
+  hunger: number;
+  thirst: number;
+  activeEnemy: Enemy | undefined;
+  location: LocationInfo | undefined;
+  activeMerchant: Merchant | undefined;
+  maxHp: number;
+  currentHp: number;
+}
+
+const buildTurnPrompt = (a: TurnPromptArgs): string => {
+  const { stats } = a;
+  const inv = a.inventory.length
+    ? a.inventory.slice(0, 30).map(i => `- ${i.name} [${i.type}/${i.rarity}]`).join('\n')
+    : '(empty)';
+
+  const rep = a.reputation.map(r => `${r.faction.replace('The ', '')}: ${r.value} (${r.status})`).join(' · ') || '(none)';
+
+  const blessings = a.blessings.length
+    ? a.blessings.map(b => b.name).join(', ')
+    : '(none)';
+
+  const sanctuaryLine = a.sanctuary
+    ? `Sanctuary: lib ${a.sanctuary.libraryLevel} · armory ${a.sanctuary.armoryLevel} · garden ${a.sanctuary.gardenLevel} · treasury ${a.sanctuary.treasuryLevel}`
+    : '';
+
+  return `PLAYER ACTION: ${a.userAction}
+
+--- CHARACTER ---
+Class: ${a.playerClass} | Level: ${a.level} (${a.currentXp}/${a.nextLevelXp} XP) | Act: ${a.currentAct} (${a.actProgress}%) | Ascension: ${a.ascensionLevel}
+HP: ${a.currentHp}/${a.maxHp} | Hunger: ${a.hunger}/100 | Thirst: ${a.thirst}/100
+STR: ${stats.strength} (${statMod(stats.strength)}) · INT: ${stats.intelligence} (${statMod(stats.intelligence)}) · STA: ${stats.stamina} (${statMod(stats.stamina)}) · CHA: ${stats.charisma} (${statMod(stats.charisma)})
+Blessings: ${blessings}
+${sanctuaryLine}
+
+--- WORLD ---
+Location: ${a.location ? `${a.location.name} (${a.location.biome}, ${a.location.weather})` : 'The Wilds'}
+Active enemy: ${a.activeEnemy ? `${a.activeEnemy.name} (HP ${a.activeEnemy.currentHp}/${a.activeEnemy.maxHp}, ${a.activeEnemy.type})` : 'none'}
+Active merchant: ${a.activeMerchant ? a.activeMerchant.name : 'none'}
+Quest: ${a.quest || '(none yet)'}
+Reputation: ${rep}
+Nemesis: ${a.nemesis ? `${a.nemesis.name} — ${a.nemesis.origin}` : 'none'}
+
+--- INVENTORY (${a.inventory.length} items) ---
+${inv}
+
+--- TASK ---
+1) Classify the action: TRIVIAL, CHALLENGING, or IMPOSSIBLE (see Charter §1–2).
+2) IMPOSSIBLE → refuse in-character with 2–3 legal choices. No items/gold/HP/XP added.
+3) CHALLENGING → return a skillCheck. Narrative must stop before the outcome.
+4) TRIVIAL → narrate briefly, apply hungerChange/thirstChange per §3, return consequences.
+5) Honor continuity. Respect stat/inventory gates. Never fabricate items. Return the full inventory.`;
 };
 
 export const generateStoryTurn = async (
@@ -88,21 +175,39 @@ export const generateStoryTurn = async (
   currentThirst: number,
   activeEnemy: Enemy | undefined,
   currentLocation: LocationInfo | undefined,
-  activeMerchant: Merchant | undefined
+  activeMerchant: Merchant | undefined,
+  currentHp: number,
+  maxHp: number
 ): Promise<AIResponse> => {
   const ai = getAIClient();
   const modelName = String(settings?.textModel || TextModel.Pro);
 
-  const prompt = `
-    PLAYER ACTION: ${userAction}
-    
-    CURRENT INVENTORY: ${JSON.stringify(currentInventory)}
-    LOCATION: ${currentLocation?.name || "The Wilds"}
-    
-    If player finds items, add them to the inventory. If combat occurs, trigger a skillCheck.
-  `;
+  const prompt = buildTurnPrompt({
+    userAction,
+    inventory: currentInventory,
+    quest: currentQuest,
+    stats: currentStats,
+    level: currentLevel,
+    currentXp,
+    nextLevelXp,
+    playerClass,
+    blessings: activeBlessings,
+    reputation: currentReputation,
+    nemesis: activeNemesis,
+    sanctuary,
+    currentAct,
+    actProgress,
+    ascensionLevel,
+    hunger: currentHunger,
+    thirst: currentThirst,
+    activeEnemy,
+    location: currentLocation,
+    activeMerchant,
+    maxHp,
+    currentHp,
+  });
 
-  const systemInstruction = getSystemInstruction(settings.language, playerClass, activeBlessings, currentReputation, activeNemesis, sanctuary, currentAct, ascensionLevel, activeEnemy, activeMerchant);
+  const systemInstruction = getSystemInstruction(settings.language);
 
   try {
     const response = await ai.models.generateContent({
