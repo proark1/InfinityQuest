@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { GameState } from '../types';
-import { AlertTriangle, Zap, Droplets, Flame, Skull } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 
 interface VisualEffectsLayerProps {
   gameState: GameState;

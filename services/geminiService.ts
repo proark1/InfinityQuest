@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import { AIResponse, AppSettings, Language, ImageSize, CharacterStats, InventoryItem, CharacterClass, Blessing, Reputation, Nemesis, SanctuaryState, Enemy, LocationInfo, Merchant, WeatherType, TextModel } from "../types";
+import { AIResponse, AppSettings, Language, ImageSize, CharacterStats, InventoryItem, CharacterClass, Blessing, Reputation, Nemesis, SanctuaryState, Enemy, LocationInfo, Merchant, TextModel } from "../types";
 
 // Helper to get the AI client. 
 const getAIClient = () => {
@@ -238,21 +238,66 @@ export const generateStoryTurn = async (
 
     const text = response.text;
     if (!text) throw new Error("No text returned from Gemini");
-    return JSON.parse(text) as AIResponse;
+    return parseAIResponse(text, {
+      currentInventory, currentQuest, currentStats, currentLevel, currentXp, nextLevelXp
+    });
   } catch (error) {
     console.error("Error generating story:", error);
-    return {
-      narrative: "The world wavers...",
-      inventory: currentInventory,
-      currentQuest: currentQuest,
-      visualPrompt: "A glitch in reality.",
-      choices: ["Try again"],
-      stats: currentStats,
-      level: currentLevel,
-      currentXp: currentXp,
-      nextLevelXp: nextLevelXp
-    };
+    return fallbackAIResponse({ currentInventory, currentQuest, currentStats, currentLevel, currentXp, nextLevelXp });
   }
+};
+
+interface FallbackContext {
+  currentInventory: InventoryItem[];
+  currentQuest: string;
+  currentStats: CharacterStats;
+  currentLevel: number;
+  currentXp: number;
+  nextLevelXp: number;
+}
+
+const fallbackAIResponse = (ctx: FallbackContext): AIResponse => ({
+  narrative: "The world wavers...",
+  inventory: ctx.currentInventory,
+  currentQuest: ctx.currentQuest,
+  visualPrompt: "A glitch in reality.",
+  choices: ["Try again"],
+  stats: ctx.currentStats,
+  level: ctx.currentLevel,
+  currentXp: ctx.currentXp,
+  nextLevelXp: ctx.nextLevelXp,
+});
+
+const parseAIResponse = (raw: string, ctx: FallbackContext): AIResponse => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    console.error("AI response was not valid JSON:", e);
+    return fallbackAIResponse(ctx);
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    console.error("AI response was not an object");
+    return fallbackAIResponse(ctx);
+  }
+
+  const obj = parsed as Record<string, unknown>;
+  if (typeof obj.narrative !== "string" || !Array.isArray(obj.choices)) {
+    console.error("AI response missing required fields (narrative/choices)");
+    return fallbackAIResponse(ctx);
+  }
+
+  const response = obj as unknown as AIResponse;
+  if (!Array.isArray(response.inventory)) response.inventory = ctx.currentInventory;
+  if (typeof response.currentQuest !== "string") response.currentQuest = ctx.currentQuest;
+  if (typeof response.visualPrompt !== "string") response.visualPrompt = "";
+  if (!response.stats) response.stats = ctx.currentStats;
+  if (typeof response.level !== "number") response.level = ctx.currentLevel;
+  if (typeof response.currentXp !== "number") response.currentXp = ctx.currentXp;
+  if (typeof response.nextLevelXp !== "number") response.nextLevelXp = ctx.nextLevelXp;
+
+  return response;
 };
 
 export const generateSceneImage = async (
@@ -270,7 +315,10 @@ export const generateSceneImage = async (
       if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
     return null;
-  } catch (error) { return null; }
+  } catch (error) {
+    console.error("Scene image generation failed:", error);
+    return null;
+  }
 };
 
 export const generateItemDetails = async (item: InventoryItem): Promise<{ lore: string; imageUrl: string | null }> => {
@@ -292,7 +340,9 @@ export const generateItemDetails = async (item: InventoryItem): Promise<{ lore: 
     for (const part of imgResp.candidates?.[0]?.content?.parts || []) {
       if (part.inlineData) imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
-  } catch(e) {}
+  } catch (e) {
+    console.error("Item details generation failed:", e);
+  }
   return { lore, imageUrl };
 };
 
@@ -308,7 +358,10 @@ export const generateMapImage = async (locationName: string, biome: string): Pro
       if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
     return null;
-  } catch (error) { return null; }
+  } catch (error) {
+    console.error("Map image generation failed:", error);
+    return null;
+  }
 };
 
 export const generateEnemyImage = async (description: string): Promise<string | null> => {
@@ -323,7 +376,10 @@ export const generateEnemyImage = async (description: string): Promise<string | 
       if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
     return null;
-  } catch (error) { return null; }
+  } catch (error) {
+    console.error("Enemy image generation failed:", error);
+    return null;
+  }
 };
 
 export const generateCharacterImage = async (portraitPrompt: string): Promise<string | null> => {
@@ -338,7 +394,10 @@ export const generateCharacterImage = async (portraitPrompt: string): Promise<st
       if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
     return null;
-  } catch (error) { return null; }
+  } catch (error) {
+    console.error("Character image generation failed:", error);
+    return null;
+  }
 };
 
 declare global {

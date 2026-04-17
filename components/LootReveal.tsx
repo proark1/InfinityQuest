@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { InventoryItem } from '../types';
-import { Package, Sparkles, X, Star } from 'lucide-react';
+import { Package, Sparkles, Star } from 'lucide-react';
 import { SoundManager } from '../utils/soundEffects';
 
 interface LootRevealProps {

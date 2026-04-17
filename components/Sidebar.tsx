@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { GameState, Language, ItemRarity, CodexCategory, InventoryItem, StatusEffect } from '../types';
-import { Backpack, BicepsFlexed, Brain, Activity, Trophy, Zap, Sword, Book, MapPin, Skull, Heart, Hammer, Sparkles, Utensils, Droplets, Flame, Save, Coins, Medal, Flag, User, Eye } from 'lucide-react';
+import { GameState, Language, ItemRarity, InventoryItem } from '../types';
+import { Backpack, BicepsFlexed, Brain, Activity, Trophy, Zap, Sword, Book, MapPin, Skull, Heart, Hammer, Sparkles, Utensils, Droplets, Flame, Coins, Medal, Flag, User, Eye } from 'lucide-react';
 import { SoundManager } from '../utils/soundEffects';
 
 interface SidebarProps {
@@ -43,16 +43,6 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, className = '', language, 
     }
   };
 
-  const getClassIcon = () => {
-    switch(gameState.playerClass) {
-      case 'Warrior': return <Sword size={18} className="text-red-400"/>;
-      case 'Mage': return <Zap size={18} className="text-blue-400"/>;
-      case 'Rogue': return <Activity size={18} className="text-green-400"/>;
-      case 'Cleric': return <BicepsFlexed size={18} className="text-amber-400"/>;
-      default: return <User size={18} />;
-    }
-  };
-
   const getStatusIcon = (type: string) => {
      switch(type) {
         case 'Poison': return <Skull size={14} className="text-emerald-500 animate-bounce" />;
@@ -86,7 +76,7 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, className = '', language, 
                       <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center mb-1">
                          <User size={16} className="text-slate-500" />
                       </div>
-                      <span className="text-[6px] font-black text-amber-500 uppercase tracking-widest">Conjuring...</span>
+                      <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Conjuring...</span>
                    </div>
                 </div>
               )}
@@ -127,7 +117,7 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, className = '', language, 
               </div>
               <div className="flex flex-wrap gap-1 mt-1">
                  {gameState.statusEffects.map((eff, i) => (
-                    <div key={i} className="p-0.5 px-1 bg-slate-950 rounded border border-slate-700 flex items-center gap-1 text-[6px] font-black text-amber-500 uppercase">
+                    <div key={i} className="p-0.5 px-1 bg-slate-950 rounded border border-slate-700 flex items-center gap-1 text-[10px] font-black text-amber-500 uppercase">
                        {getStatusIcon(eff.type)} {eff.type}
                     </div>
                  ))}

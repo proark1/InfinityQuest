@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { Dices, Coins, Trophy, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Dices, X } from 'lucide-react';
 import { SoundManager } from '../utils/soundEffects';
 
 interface MinigameDiceProps {
@@ -181,15 +181,6 @@ const MinigameDice: React.FC<MinigameDiceProps> = ({ playerGold, onClose, onResu
 };
 
 const DiceFace: React.FC<{ value: number, isRolling?: boolean, isEnemy?: boolean }> = ({ value, isRolling, isEnemy }) => {
-   const dots = {
-      1: ['justify-center items-center'],
-      2: ['justify-start items-start', 'justify-end items-end'],
-      3: ['justify-start items-start', 'justify-center items-center', 'justify-end items-end'],
-      4: ['justify-start items-start', 'justify-end items-start', 'justify-start items-end', 'justify-end items-end'],
-      5: ['justify-start items-start', 'justify-end items-start', 'justify-center items-center', 'justify-start items-end', 'justify-end items-end'],
-      6: ['justify-start items-start', 'justify-end items-start', 'justify-start items-center', 'justify-end items-center', 'justify-start items-end', 'justify-end items-end']
-   };
-
    return (
       <div className={`w-12 h-12 bg-slate-200 rounded-lg shadow-[inset_0_-2px_4px_rgba(0,0,0,0.2)] grid grid-cols-3 grid-rows-3 p-2 gap-0.5 ${isRolling ? 'animate-spin' : ''}`}>
          {/* Render Dots based on value */}

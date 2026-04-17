@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { GameState, InventoryItem } from '../types';
+import { GameState } from '../types';
 import { Sword, Shield, Footprints, Heart, ShoppingBag, ArrowRight, X, Flame, Dices } from 'lucide-react';
 import { SoundManager } from '../utils/soundEffects';
 

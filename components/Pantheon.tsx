@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { Blessing, BLESSINGS, MetaState, PastHero, LegacyItem } from '../types';
-import { Star, Crown, Scroll, Sparkles, User, Eye, Lock, Castle, Book, Sword, Sprout, Archive, ArrowRight, Hammer } from 'lucide-react';
+import { Blessing, BLESSINGS, MetaState, LegacyItem } from '../types';
+import { Star, Crown, Scroll, Sparkles, User, Eye, Lock, Castle, Book, Sword, Sprout, Archive } from 'lucide-react';
 
 interface PantheonProps {
   metaState: MetaState;

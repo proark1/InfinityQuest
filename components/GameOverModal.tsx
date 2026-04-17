@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { GameState, InventoryItem } from '../types';
+import { GameState } from '../types';
 import { Skull, Trophy, Star, BookOpen, Crown } from 'lucide-react';
 
 interface GameOverModalProps {

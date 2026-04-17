@@ -42,4 +42,4 @@ const FloatingTextLayer: React.FC<FloatingTextLayerProps> = ({ items }) => {
   );
 };
 
-export default FloatingTextLayer;
+export default React.memo(FloatingTextLayer);

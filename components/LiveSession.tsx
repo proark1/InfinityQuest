@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration } from "@google/genai";
-import { Mic, MicOff, X, Activity, MessageSquare, UserCog, RefreshCw, Users, Volume2, AlertTriangle, Settings, ScrollText, User, Sparkles, Wand2, Shield, Layout, Info } from 'lucide-react';
+import { Mic, MicOff, X, Layout } from 'lucide-react';
 import { GameState, Language, LiveVoice, CharacterRegistrationHandler, StatUpdateHandler, XpUpdateHandler, SurvivalUpdateHandler, InventoryItem } from '../types';
 import { createPcmBlob, decodeAudioData, base64ToUint8Array } from '../utils/audio';
 import Sidebar from './Sidebar';
@@ -35,7 +35,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({
 }) => {
   const [status, setStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const [isMicOn, setIsMicOn] = useState(true);
-  const [selectedVoice, setSelectedVoice] = useState<LiveVoice>('Kore');
+  const [selectedVoice] = useState<LiveVoice>('Kore');
   const [isNarratorSpeaking, setIsNarratorSpeaking] = useState(false);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   
@@ -174,7 +174,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({
           onmessage: async (msg: LiveServerMessage) => {
             if (!mountedRef.current) return;
 
-            if (msg.toolCall) {
+            if (msg.toolCall?.functionCalls) {
               for (const fc of msg.toolCall.functionCalls) {
                 let result = { result: "ok" };
                 if (fc.name === "update_inventory") onInventoryUpdate((fc.args as any).items);

@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { GameTurn, Language } from '../types';
-import { User, Bot, Sparkles, Volume2, Pause, RefreshCw, AlertCircle, Skull } from 'lucide-react';
+import { User, Bot, Sparkles, Volume2, Pause, RefreshCw, Skull } from 'lucide-react';
 import TypewriterText from './TypewriterText';
 
 interface StoryFeedProps {

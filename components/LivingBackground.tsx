@@ -235,4 +235,4 @@ const LivingBackground: React.FC<LivingBackgroundProps> = ({ biome = 'Unknown', 
   return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0" />;
 };
 
-export default LivingBackground;
+export default React.memo(LivingBackground);
