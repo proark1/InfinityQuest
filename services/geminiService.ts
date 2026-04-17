@@ -37,9 +37,20 @@ Say "no" when the world says "no". The player's fun comes from constraints, not 
    - Social wins over powerful NPCs require CHA ≥ 14 AND good reputation AND a plausible angle.
 
 3) TURN ECONOMY (apply on any turn that takes real time).
-   - hungerChange: -2, thirstChange: -3. Double under Storm/Ash weather. Skip on pure dialogue turns.
+   - hungerChange: -2, thirstChange: -3 (a client floor applies if you forget). Double under Storm/Ash weather. Skip on pure dialogue.
    - HP never regenerates passively. Only items, rest, shrines, or explicit spells heal.
    - Do NOT touch adrenaline — the client handles it.
+   - HUNGER/THIRST NARRATIVE CUES:
+       • < 50: mention hunger/thirst sparingly ("your stomach grumbles").
+       • < 25: a sentence of noticeable weakness.
+       • = 0: the player is starving / dehydrating — the client will bleed HP automatically; describe the weakness, cracked lips, blurred vision.
+   - FOOD & DRINK: when giving the player edible loot (bread, meat, berries, waterskin, potion, stew), you MUST set type to one of: "Food", "Drink", "Potion", or "Consumable", AND set the consumable object with realistic restore values:
+       • Bread/apple → hungerRestore: 15–25
+       • Cooked meat/stew → hungerRestore: 30–50
+       • Waterskin/ale → thirstRestore: 25–40
+       • Healing potion → hpRestore: 15–40
+       • Mixed (stew + broth) may restore both hunger and thirst.
+     Never set consumable on Weapons, Armor, Spellbooks, or Materials.
 
 4) CONTINUITY.
    - Honor the last 10 turns. If the player killed the innkeeper, that inn is a crime scene.
@@ -220,19 +231,27 @@ export const generateStoryTurn = async (
           type: Type.OBJECT,
           properties: {
             narrative: { type: Type.STRING },
-            inventory: { 
-              type: Type.ARRAY, 
-              items: { 
+            inventory: {
+              type: Type.ARRAY,
+              items: {
                 type: Type.OBJECT,
                 properties: {
                   name: { type: Type.STRING },
                   rarity: { type: Type.STRING, enum: ["common", "uncommon", "rare", "epic", "legendary"] },
                   type: { type: Type.STRING },
                   description: { type: Type.STRING },
-                  value: { type: Type.NUMBER }
+                  value: { type: Type.NUMBER },
+                  consumable: {
+                    type: Type.OBJECT,
+                    properties: {
+                      hungerRestore: { type: Type.NUMBER },
+                      thirstRestore: { type: Type.NUMBER },
+                      hpRestore: { type: Type.NUMBER }
+                    }
+                  }
                 },
                 required: ["name", "rarity", "type"]
-              } 
+              }
             },
             combat: {
               type: Type.OBJECT,

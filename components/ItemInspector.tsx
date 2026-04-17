@@ -2,15 +2,16 @@
 import React, { useEffect, useState } from 'react';
 import { InventoryItem, SPELLBOOK_DATA } from '../types';
 import { generateItemDetails } from '../services/geminiService';
-import { X, Sparkles, Package, Loader, BookOpen, Wand2, Zap, Flame, Snowflake } from 'lucide-react';
+import { X, Sparkles, Package, Loader, BookOpen, Wand2, Zap, Flame, Snowflake, Utensils } from 'lucide-react';
 import { SoundManager } from '../utils/soundEffects';
 
 interface ItemInspectorProps {
   item: InventoryItem | null;
   onClose: () => void;
+  onConsume?: (item: InventoryItem) => void;
 }
 
-const ItemInspector: React.FC<ItemInspectorProps> = ({ item, onClose }) => {
+const ItemInspector: React.FC<ItemInspectorProps> = ({ item, onClose, onConsume }) => {
   const [details, setDetails] = useState<{ lore: string; imageUrl: string | null } | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -146,6 +147,32 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({ item, onClose }) => {
                        <span className="text-slate-300 text-xl font-black">{item.type}</span>
                     </div>
                  </div>
+
+                 {item.consumable && onConsume && (
+                    <div className="w-full space-y-3">
+                       <div className="flex items-center justify-center gap-3 text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400">
+                          <Utensils size={14} />
+                          Consumable Effects
+                       </div>
+                       <div className="flex justify-center gap-2 flex-wrap">
+                          {item.consumable.hungerRestore ? (
+                             <span className="px-3 py-1.5 bg-orange-950/40 border border-orange-700/40 text-orange-300 text-xs font-bold rounded-full">+{item.consumable.hungerRestore} Hunger</span>
+                          ) : null}
+                          {item.consumable.thirstRestore ? (
+                             <span className="px-3 py-1.5 bg-blue-950/40 border border-blue-700/40 text-blue-300 text-xs font-bold rounded-full">+{item.consumable.thirstRestore} Thirst</span>
+                          ) : null}
+                          {item.consumable.hpRestore ? (
+                             <span className="px-3 py-1.5 bg-red-950/40 border border-red-700/40 text-red-300 text-xs font-bold rounded-full">+{item.consumable.hpRestore} HP</span>
+                          ) : null}
+                       </div>
+                       <button
+                          onClick={() => { onConsume(item); onClose(); }}
+                          className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black uppercase tracking-widest rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg flex items-center justify-center gap-2"
+                       >
+                          <Utensils size={18} /> Consume
+                       </button>
+                    </div>
+                 )}
                </>
              )}
           </div>

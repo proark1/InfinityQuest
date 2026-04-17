@@ -191,6 +191,29 @@ export function useGameTurn({
             }
           });
 
+          // Hunger/thirst: trust AI's change, then apply a -1 floor if the AI
+          // didn't decrement (unless this is the opening welcome turn).
+          const aiHungerChange = aiResponse.hungerChange ?? 0;
+          const aiThirstChange = aiResponse.thirstChange ?? 0;
+          const timePasses = !isInitial;
+          const floorHunger = timePasses && aiHungerChange >= 0 ? -1 : 0;
+          const floorThirst = timePasses && aiThirstChange >= 0 ? -1 : 0;
+          let newHunger = clamp(prev.hunger + aiHungerChange + floorHunger, 0, HUNGER_THIRST_MAX);
+          let newThirst = clamp(prev.thirst + aiThirstChange + floorThirst, 0, HUNGER_THIRST_MAX);
+
+          // Starvation/dehydration: -5 HP each while the bar is at 0.
+          let starvationDamage = 0;
+          if (newHunger === 0) starvationDamage += 5;
+          if (newThirst === 0) starvationDamage += 5;
+
+          const aiHpChange = aiResponse.hpChange ?? 0;
+          const newHp = clamp(prev.currentHp + aiHpChange - starvationDamage, 0, prev.maxHp);
+
+          const dyingFromStarvation = newHp === 0 && starvationDamage > 0 && aiHpChange >= 0;
+          const starvationCause = newHunger === 0 && newThirst === 0
+            ? 'Starvation and dehydration'
+            : newHunger === 0 ? 'Starvation' : 'Dehydration';
+
           const nextState: GameState = {
             ...prev,
             inventory: mergedInventory,
@@ -200,9 +223,9 @@ export function useGameTurn({
             level: aiResponse.level || prev.level,
             currentXp: aiResponse.currentXp || prev.currentXp,
             nextLevelXp: aiResponse.nextLevelXp || prev.nextLevelXp,
-            currentHp: clamp(prev.currentHp + (aiResponse.hpChange || 0), 0, prev.maxHp),
-            hunger: clamp(prev.hunger + (aiResponse.hungerChange || 0), 0, HUNGER_THIRST_MAX),
-            thirst: clamp(prev.thirst + (aiResponse.thirstChange || 0), 0, HUNGER_THIRST_MAX),
+            currentHp: newHp,
+            hunger: newHunger,
+            thirst: newThirst,
             adrenaline: Math.min(
               ADRENALINE_MAX,
               (prev.adrenaline || 0) + (prev.activeEnemy ? 20 : 10),
@@ -211,6 +234,10 @@ export function useGameTurn({
             activeMerchant: aiResponse.merchant || undefined,
             isBossFight: aiResponse.isBossFight || false,
             isVictory: aiResponse.isVictory || false,
+            isGameOver: newHp === 0,
+            gameOverCause: newHp === 0
+              ? (dyingFromStarvation ? starvationCause : aiResponse.causeOfDeath || prev.gameOverCause || 'Unknown')
+              : prev.gameOverCause,
             history: [
               ...historyWithUser,
               {
@@ -223,6 +250,11 @@ export function useGameTurn({
               },
             ],
           };
+
+          if (starvationDamage > 0) {
+            addFloatingText(`-${starvationDamage} HP (${newHunger === 0 && newThirst === 0 ? 'starving/parched' : newHunger === 0 ? 'starving' : 'parched'})`, 'damage');
+            SoundManager.playDamage();
+          }
 
           if (aiResponse.newAbilities && aiResponse.newAbilities.length > 0) {
             nextState.abilities = [...prev.abilities, ...aiResponse.newAbilities];

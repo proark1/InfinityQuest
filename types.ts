@@ -1,14 +1,21 @@
 
 export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
+export interface ConsumableEffect {
+  hungerRestore?: number; // +N hunger on consume
+  thirstRestore?: number; // +N thirst on consume
+  hpRestore?: number;     // +N HP on consume
+}
+
 export interface InventoryItem {
   name: string;
   rarity: ItemRarity;
-  type: string; // e.g., Weapon, Armor, Material, Spellbook
+  type: string; // e.g., Weapon, Armor, Material, Spellbook, Food, Drink, Potion
   description?: string;
   value?: number; // Gold value
   lore?: string; // Generated on inspection
   imageUrl?: string; // Generated on inspection
+  consumable?: ConsumableEffect; // If set, item can be eaten/drunk/used to restore the listed stats
 }
 
 export interface Spell {

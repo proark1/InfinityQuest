@@ -146,6 +146,28 @@ function App() {
     setGameState(prev => ({ ...prev, gold: Math.max(0, prev.gold + netGold) }));
   }, [setGameState]);
 
+  const handleConsume = useCallback((item: InventoryItem) => {
+    if (!item.consumable) return;
+    const { hungerRestore = 0, thirstRestore = 0, hpRestore = 0 } = item.consumable;
+    SoundManager.playConfirm();
+    setGameState(prev => {
+      const idx = prev.inventory.findIndex(i => i.name === item.name);
+      const nextInventory = idx >= 0
+        ? [...prev.inventory.slice(0, idx), ...prev.inventory.slice(idx + 1)]
+        : prev.inventory;
+      return {
+        ...prev,
+        inventory: nextInventory,
+        hunger: clamp(prev.hunger + hungerRestore, 0, HUNGER_THIRST_MAX),
+        thirst: clamp(prev.thirst + thirstRestore, 0, HUNGER_THIRST_MAX),
+        currentHp: clamp(prev.currentHp + hpRestore, 0, prev.maxHp),
+      };
+    });
+    if (hungerRestore) addFloatingText(`+${hungerRestore} Hunger`, 'info');
+    if (thirstRestore) addFloatingText(`+${thirstRestore} Thirst`, 'info');
+    if (hpRestore) addFloatingText(`+${hpRestore} HP`, 'heal');
+  }, [addFloatingText, setGameState]);
+
   const handleAiStudioConnect = useCallback(async () => {
     await requestApiKey();
     const ok = await checkApiKey();
@@ -462,7 +484,7 @@ function App() {
          />
       )}
 
-      {inspectItem && <ItemInspector item={inspectItem} onClose={() => setInspectItem(null)} />}
+      {inspectItem && <ItemInspector item={inspectItem} onClose={() => setInspectItem(null)} onConsume={handleConsume} />}
       <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} settings={settings} onSettingsChange={setSettings} onNewGame={() => { setSettingsOpen(false); resetGame(); }} />
       <GameOverModal
         isOpen={gameState.isGameOver}
