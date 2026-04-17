@@ -4,6 +4,7 @@ import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration } f
 import { Mic, MicOff, X, Layout } from 'lucide-react';
 import { GameState, Language, LiveVoice, CharacterRegistrationHandler, StatUpdateHandler, XpUpdateHandler, SurvivalUpdateHandler, InventoryItem } from '../types';
 import { createPcmBlob, decodeAudioData, base64ToUint8Array } from '../utils/audio';
+import { getApiKey } from '../utils/apiKey';
 import Sidebar from './Sidebar';
 
 interface LiveSessionProps {
@@ -114,7 +115,7 @@ const LiveSession: React.FC<LiveSessionProps> = ({
     setStatus('connecting');
     
     try {
-      const apiKey = process.env.API_KEY;
+      const apiKey = getApiKey();
       if (!apiKey) throw new Error("API Key missing");
 
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;

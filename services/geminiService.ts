@@ -1,14 +1,14 @@
 
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { AIResponse, AppSettings, Language, ImageSize, CharacterStats, InventoryItem, CharacterClass, Blessing, Reputation, Nemesis, SanctuaryState, Enemy, LocationInfo, Merchant, TextModel } from "../types";
+import { getApiKey } from "../utils/apiKey";
 
-// Helper to get the AI client. 
 const getAIClient = () => {
-  const apiKey = process.env.API_KEY;
+  const apiKey = getApiKey();
   if (!apiKey) {
-    console.warn("API Key not found in process.env");
+    throw new Error("Gemini API key not configured. Please add your key in Settings.");
   }
-  return new GoogleGenAI({ apiKey: apiKey });
+  return new GoogleGenAI({ apiKey });
 };
 
 const getSystemInstruction = (
@@ -437,8 +437,13 @@ export const generateAudio = async (text: string, voiceName: string = 'Kore'): P
 };
 
 export const checkApiKey = async (): Promise<boolean> => {
+  if (getApiKey()) return true;
   if (typeof window.aistudio !== 'undefined' && window.aistudio.hasSelectedApiKey) {
-    return await window.aistudio.hasSelectedApiKey();
+    try {
+      return await window.aistudio.hasSelectedApiKey();
+    } catch {
+      return false;
+    }
   }
   return false;
 };
@@ -448,3 +453,6 @@ export const requestApiKey = async (): Promise<void> => {
     await window.aistudio.openSelectKey();
   }
 };
+
+export const isAiStudioAvailable = (): boolean =>
+  typeof window !== 'undefined' && typeof window.aistudio?.openSelectKey === 'function';

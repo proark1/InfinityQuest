@@ -27,7 +27,8 @@ import LivingBackground from './components/LivingBackground';
 import MinigameDice from './components/MinigameDice';
 import ItemInspector from './components/ItemInspector';
 import { SoundManager } from './utils/soundEffects';
-import { checkApiKey, generateAudio, requestApiKey } from './services/geminiService';
+import { checkApiKey, generateAudio, isAiStudioAvailable, requestApiKey } from './services/geminiService';
+import { setApiKey as saveApiKey } from './utils/apiKey';
 import { AlertTriangle, Menu, Mic, Send, Settings } from 'lucide-react';
 import {
   HUNGER_THIRST_MAX,
@@ -134,8 +135,16 @@ function App() {
     setGameState(prev => ({ ...prev, gold: Math.max(0, prev.gold + netGold) }));
   }, [setGameState]);
 
-  const handleConnect = useCallback(async () => {
+  const handleAiStudioConnect = useCallback(async () => {
     await requestApiKey();
+    const ok = await checkApiKey();
+    setApiKeyReady(ok);
+  }, []);
+
+  const handleManualKeySubmit = useCallback((key: string) => {
+    const trimmed = key.trim();
+    if (!trimmed) return;
+    saveApiKey(trimmed);
     setApiKeyReady(true);
   }, []);
 
@@ -163,14 +172,10 @@ function App() {
 
   if (!apiKeyReady) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700 text-center">
-          <AlertTriangle className="text-amber-500 w-16 h-16 mx-auto mb-6" />
-          <h1 className="text-2xl font-bold text-white mb-2 fantasy-font">Access Required</h1>
-          <p className="text-slate-400 mb-8">Connect your Google Cloud API key to start.</p>
-          <button onClick={handleConnect} className="w-full py-3 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-lg transition-all">Connect API Key</button>
-        </div>
-      </div>
+      <ApiKeyGate
+        onAiStudioConnect={handleAiStudioConnect}
+        onManualKey={handleManualKeySubmit}
+      />
     );
   }
 
@@ -452,6 +457,86 @@ function App() {
         gameState={gameState}
         onAscend={(shardsEarned) => handleRunEnd(shardsEarned, 'Ascended')}
       />
+    </div>
+  );
+}
+
+interface ApiKeyGateProps {
+  onAiStudioConnect: () => void | Promise<void>;
+  onManualKey: (key: string) => void;
+}
+
+function ApiKeyGate({ onAiStudioConnect, onManualKey }: ApiKeyGateProps) {
+  const [manualKey, setManualKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const aiStudio = isAiStudioAvailable();
+
+  const submit = () => {
+    if (manualKey.trim()) onManualKey(manualKey);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+      <div className="max-w-md w-full bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700">
+        <div className="text-center">
+          <AlertTriangle className="text-amber-500 w-16 h-16 mx-auto mb-6" />
+          <h1 className="text-2xl font-bold text-white mb-2 fantasy-font">Access Required</h1>
+          <p className="text-slate-400 mb-6 text-sm">
+            A Gemini API key is needed for story generation, images, and live voice mode.
+          </p>
+        </div>
+
+        <label className="block text-xs font-medium text-slate-300 mb-2 uppercase tracking-wider">
+          Gemini API Key
+        </label>
+        <div className="flex gap-2 mb-2">
+          <input
+            type={showKey ? 'text' : 'password'}
+            value={manualKey}
+            onChange={(e) => setManualKey(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
+            placeholder="AIza..."
+            aria-label="Gemini API key"
+            className="flex-1 bg-slate-950 border border-slate-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
+          />
+          <button
+            type="button"
+            onClick={() => setShowKey(s => !s)}
+            className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs rounded-lg"
+            aria-label={showKey ? 'Hide API key' : 'Show API key'}
+          >
+            {showKey ? 'Hide' : 'Show'}
+          </button>
+        </div>
+        <p className="text-[11px] text-slate-500 mb-6">
+          Stored only in this browser's localStorage. Get a key at{' '}
+          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:underline">aistudio.google.com/apikey</a>.
+        </p>
+
+        <button
+          onClick={submit}
+          disabled={!manualKey.trim()}
+          className="w-full py-3 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-lg transition-all"
+        >
+          Save Key & Enter
+        </button>
+
+        {aiStudio && (
+          <>
+            <div className="flex items-center gap-2 my-4">
+              <div className="flex-1 h-px bg-slate-700" />
+              <span className="text-[11px] text-slate-500 uppercase tracking-wider">or</span>
+              <div className="flex-1 h-px bg-slate-700" />
+            </div>
+            <button
+              onClick={() => onAiStudioConnect()}
+              className="w-full py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium rounded-lg transition-all text-sm"
+            >
+              Use AI Studio Key
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
