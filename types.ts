@@ -1,0 +1,382 @@
+
+export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+
+export interface InventoryItem {
+  name: string;
+  rarity: ItemRarity;
+  type: string; // e.g., Weapon, Armor, Material, Spellbook
+  description?: string;
+  value?: number; // Gold value
+  lore?: string; // Generated on inspection
+  imageUrl?: string; // Generated on inspection
+}
+
+export interface Spell {
+  name: string;
+  level: number;
+  description: string;
+  requirement: string;
+  manaCost: number;
+}
+
+export type StatusEffectType = 'Poison' | 'Burn' | 'Freeze' | 'Bleed' | 'Stun' | 'Regen';
+
+export interface StatusEffect {
+  type: StatusEffectType;
+  duration: number; // turns
+  intensity: number;
+}
+
+export interface FloatingText {
+  id: string;
+  text: string;
+  type: 'damage' | 'heal' | 'gold' | 'xp' | 'info' | 'crit';
+  x: number; // Percentage 0-100
+  y: number; // Percentage 0-100
+}
+
+export interface Merchant {
+  name: string;
+  description: string;
+  inventory: InventoryItem[];
+}
+
+export interface Ability {
+  name: string;
+  description: string;
+  icon?: string;
+}
+
+export interface Companion {
+  name: string;
+  species: string;
+  personality: string;
+  portraitUrl?: string;
+}
+
+export interface Enemy {
+  name: string;
+  description: string;
+  currentHp: number;
+  maxHp: number;
+  imageUrl?: string;
+  type: string; // "Beast", "Undead", etc.
+  statusEffects: StatusEffect[];
+}
+
+export type WeatherType = 'Clear' | 'Rain' | 'Storm' | 'Snow' | 'Fog' | 'Ash';
+
+export interface LocationInfo {
+  name: string;
+  description: string;
+  biome: string; // "Forest", "Dungeon", "City"
+  weather: WeatherType; 
+}
+
+export interface CharacterVoiceProfile {
+  name: string;
+  voiceDescription: string;
+}
+
+export interface CharacterStats {
+  strength: number;
+  intelligence: number;
+  stamina: number;
+  charisma: number;
+}
+
+export type CharacterClass = 'Warrior' | 'Mage' | 'Rogue' | 'Cleric' | 'Traveler';
+
+export type CodexCategory = 'Bestiary' | 'Atlas';
+
+export interface CodexEntry {
+  id: string;
+  name: string;
+  category: CodexCategory;
+  description: string;
+  dateUnlocked: number;
+}
+
+export interface SkillCheck {
+  attribute: keyof CharacterStats;
+  difficultyClass: number; // The target number to beat
+  reason: string; // "to jump the chasm"
+}
+
+export interface WorldRoll {
+  label: string; // "The Goblin swings..."
+  result?: number; // Optional predefined result
+}
+
+export interface CraftingResult {
+  success: boolean;
+  message: string; // "You successfully forged..." or "The items crumbled..."
+  producedItem?: InventoryItem;
+}
+
+// --- FACTIONS & ACHIEVEMENTS ---
+
+export type FactionName = 'The Solar Vanguard' | 'The Lunar Syndicate' | 'The Verdant Circle';
+
+export interface Reputation {
+  faction: FactionName;
+  value: number; // -100 to 100
+  status: 'Hostile' | 'Neutral' | 'Friendly' | 'Exalted';
+}
+
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  unlockedAt?: number;
+}
+
+// --- META PROGRESSION TYPES ---
+
+export interface Blessing {
+  id: string;
+  name: string;
+  description: string;
+  cost: number;
+  effect: string; // Description for UI
+}
+
+export interface PastHero {
+  id: string;
+  name: string;
+  class: CharacterClass;
+  level: number;
+  date: number;
+  score: number;
+  causeOfDeath: string;
+  portraitUrl?: string;
+  ascensionLevel: number;
+}
+
+export interface Nemesis {
+  name: string;
+  origin: string; // "Killer of [Hero Name]"
+  defeatedAt: number;
+}
+
+export interface SanctuaryState {
+  libraryLevel: number; // Knowledge/Hints
+  armoryLevel: number; // Starting Stats
+  gardenLevel: number; // Starting Consumables
+  treasuryLevel: number; // Starting Gold
+}
+
+export interface LegacyItem extends InventoryItem {
+  buriedBy: string;
+  buriedAt: number;
+  note: string;
+}
+
+export interface MetaState {
+  soulShards: number;
+  pastHeroes: PastHero[];
+  lastOracleClaim: number; // Timestamp
+  activeNemesis?: Nemesis; // The villain hunting the player
+  sanctuary: SanctuaryState;
+  legacyItems: LegacyItem[];
+  ascensionLevel: number; // 0 = Base, 1+ = NG+
+}
+
+export interface GameState {
+  inventory: InventoryItem[];
+  gold: number; // New Economy
+  currentQuest: string;
+  history: GameTurn[];
+  characterRegistry: CharacterVoiceProfile[];
+  isGameOver: boolean;
+  gameOverCause?: string; // Specific killer name
+  isVictory: boolean; // Did they beat Act 3?
+  
+  // RPG System
+  playerClass: CharacterClass;
+  title: string;
+  level: number;
+  currentXp: number;
+  nextLevelXp: number;
+  stats: CharacterStats;
+  currentHp: number;
+  maxHp: number;
+  adrenaline: number; // 0-100 Limit Break Meter
+  flowStreak: number; // 0+ Combo counter. Resets on damage taken.
+  statusEffects: StatusEffect[];
+  
+  // Survival System
+  hunger: number; // 0-100 (0 = Starvation)
+  thirst: number; // 0-100 (0 = Dehydration)
+  
+  abilities: Ability[];
+  codex: CodexEntry[];
+  portraitUrl?: string;
+  companion?: Companion;
+  
+  // Combat & World
+  activeEnemy?: Enemy;
+  activeMerchant?: Merchant; // New: Trading
+  location?: LocationInfo;
+  maps: Record<string, string>; // Map of LocationName -> ImageUrl
+  
+  // Structure
+  currentAct: number; // 1, 2, 3
+  actProgress: number; // 0-100
+  isBossFight: boolean;
+  ascensionLevel: number; // Current difficulty tier
+
+  // Social
+  reputation: Reputation[];
+  unlockedAchievements: string[]; // IDs of unlocked achievements
+  
+  // Roguelite
+  activeBlessings: Blessing[];
+  activeNemesis?: Nemesis; // Injected from Meta
+  
+  // Run Specific
+  foundShrine?: boolean; // If true, UI allows burying an item
+}
+
+export interface GameTurn {
+  id: string;
+  role: 'user' | 'model';
+  text: string;
+  choices?: string[];
+  imageUrl?: string;
+  imageLoading?: boolean;
+  audioUrl?: string;
+  audioLoading?: boolean;
+  audioError?: string;
+  rollResult?: { total: number; success: boolean; dc: number }; // If this turn involved a roll
+  isBossTurn?: boolean; // Visual flair for boss dialogue
+}
+
+export interface CombatUpdate {
+  newEnemy?: Enemy;
+  damageDealtToEnemy?: number;
+  enemyDefeated?: boolean;
+  playerStatusApplied?: StatusEffect[];
+  enemyStatusApplied?: StatusEffect[];
+}
+
+export interface AIResponse {
+  narrative: string;
+  inventory: InventoryItem[]; // Structured inventory
+  goldChange?: number; // +/- Gold
+  currentQuest: string;
+  visualPrompt: string;
+  portraitPrompt?: string; // Prompt to generate character avatar
+  choices: string[];
+  
+  // RPG Updates
+  stats: CharacterStats;
+  hpChange?: number; // +5 or -10
+  hungerChange?: number; // -2 (time) or +20 (eating)
+  thirstChange?: number; // -3 (time) or +30 (drinking)
+  
+  // Combat
+  combat?: CombatUpdate;
+  
+  // Location
+  location?: LocationInfo;
+  
+  causeOfDeath?: string; // If hpChange kills player, who did it?
+  level: number;
+  currentXp: number;
+  nextLevelXp: number;
+  newAbilities?: Ability[]; // Options for level up
+  
+  // Structure Updates
+  actProgressChange?: number; // +10 or +20
+  isBossFight?: boolean;
+  isVictory?: boolean; // Beat the game
+
+  // Social
+  reputationChange?: { faction: FactionName; amount: number }[];
+  
+  // Skill Check Request (Pauses game)
+  skillCheck?: SkillCheck;
+  
+  // World/Narrator Roll (UI Roll)
+  worldRoll?: WorldRoll;
+
+  // Codex Updates
+  newCodexEntries?: CodexEntry[];
+
+  // Companion
+  newCompanion?: Companion; // If the player gains a companion
+  
+  // Crafting
+  craftingResult?: CraftingResult; // If the player attempted to craft
+  
+  // New: Merchant
+  merchant?: Merchant;
+
+  // Legacy System
+  foundShrine?: boolean; // AI signals that the player is at a shrine
+}
+
+export enum ImageSize {
+  Size_1K = '1K',
+  Size_2K = '2K',
+  Size_4K = '4K',
+}
+
+export enum TextModel {
+  Pro = 'gemini-3-pro-preview',
+  FlashLite = 'gemini-flash-lite-latest',
+}
+
+export enum Language {
+  English = 'en',
+  German = 'de',
+}
+
+export type LiveVoice = 'Puck' | 'Charon' | 'Kore' | 'Fenrir';
+
+export interface AppSettings {
+  textModel: TextModel;
+  imageSize: ImageSize;
+  autoGenerateImages: boolean;
+  language: Language;
+}
+
+export type GameStateUpdate = (newState: Partial<GameState>) => void;
+export type CharacterRegistrationHandler = (name: string, description: string) => void;
+export type StatUpdateHandler = (newStats: CharacterStats) => void;
+export type SurvivalUpdateHandler = (hungerChange: number, thirstChange: number) => void;
+export type XpUpdateHandler = (xpAdded: number, levelUp: boolean) => void;
+export type InventoryUpdateHandler = (items: InventoryItem[]) => void;
+
+// --- CONSTANTS ---
+
+export const BLESSINGS: Blessing[] = [
+  { id: 'titan_blood', name: "Titan's Blood", description: "Start with +10 Max HP.", cost: 100, effect: "+10 HP" },
+  { id: 'scholar_mind', name: "Scholar's Mind", description: "Start with +2 Intelligence.", cost: 150, effect: "+2 INT" },
+  { id: 'warrior_spirit', name: "Warrior's Spirit", description: "Start with +2 Strength.", cost: 150, effect: "+2 STR" },
+  { id: 'merchant_favor', name: "Merchant's Favor", description: "Start with a Rare item.", cost: 300, effect: "Rare Item" },
+  { id: 'legendary_lineage', name: "Legendary Lineage", description: "Higher chance to find Epic/Legendary loot.", cost: 500, effect: "Better Loot" },
+];
+
+export const ACHIEVEMENTS_LIST: Achievement[] = [
+  { id: 'first_blood', title: 'First Blood', description: 'Survive your first combat encounter.', icon: 'sword' },
+  { id: 'hoarder', title: 'Hoarder', description: 'Have 10 or more items in your inventory.', icon: 'backpack' },
+  { id: 'wealthy', title: 'Wealthy', description: 'Amass 500 Gold.', icon: 'coins' },
+  { id: 'legendary_find', title: 'Treasure Hunter', description: 'Find a Legendary item.', icon: 'star' },
+  { id: 'social_butterfly', title: 'Diplomat', description: 'Reach 16 Charisma.', icon: 'message-circle' },
+  { id: 'survivor', title: 'Survivor', description: 'Reach Level 5.', icon: 'crown' },
+  { id: 'beast_master', title: 'Beast Master', description: 'Gain a Companion.', icon: 'paw-print' },
+  { id: 'faction_friend', title: 'Ally', description: 'Reach "Friendly" status with any faction.', icon: 'flag' },
+  { id: 'ascended', title: 'Ascended', description: 'Complete Act 3 and Ascend.', icon: 'zap' },
+];
+
+export const SPELLBOOK_DATA: Spell[] = [
+  { name: 'Fireball', level: 1, description: 'Unleash a sphere of flame dealing massive fire damage.', requirement: 'Learn from an Ember Spirit or mixing Charcoal and Sulfur.', manaCost: 30 },
+  { name: 'Mage Hand', level: 1, description: 'A spectral hand that can interact with objects at distance.', requirement: 'Default basic spell.', manaCost: 5 },
+  { name: 'Frost Nova', level: 1, description: 'Freeze all enemies in a short radius.', requirement: 'Acquire Frozen Essence.', manaCost: 25 },
+  { name: 'Arcane Missiles', level: 1, description: 'Rapid bursts of magical energy.', requirement: 'Default basic spell.', manaCost: 15 },
+  { name: 'Heal Wound', level: 1, description: 'Knit flesh back together using raw magic.', requirement: 'Acquire Blessed Water.', manaCost: 20 },
+  { name: 'Invisibility', level: 2, description: 'Become unseen for a short duration.', requirement: 'Mixing Void Dust and Cloud Vapor.', manaCost: 40 }
+];

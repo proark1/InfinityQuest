@@ -1,0 +1,7 @@
+{
+  "name": "Infinity Quest",
+  "description": "An infinite choose-your-own-adventure engine driven by AI. Features dynamic inventory tracking, quest management, and real-time scene visualization.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
