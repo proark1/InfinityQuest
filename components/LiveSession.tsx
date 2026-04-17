@@ -7,6 +7,47 @@ import { createPcmBlob, decodeAudioData, base64ToUint8Array } from '../utils/aud
 import { getApiKey } from '../utils/apiKey';
 import Sidebar from './Sidebar';
 
+const VOICE_SYSTEM_INSTRUCTION = `You are the Narrator and Rules Engine of INFINITY QUEST in voice mode.
+Speak with authority, atmosphere, and flavor. Always respond via audio.
+
+REALISM CHARTER (abridged):
+- Classify each player action: trivial (narrate), challenging (pause and narrate tension), impossible (refuse in-character).
+- No conjuring items, gold, or HP from thin air. Magic requires INT >= 12 and a known spell/ability.
+- NPCs don't gift legendary items. Merchants don't give things away.
+- Honor continuity: reference prior events, reputation, and the player's companions/nemesis.
+- Turn economy: call update_survival with hungerChange -2 / thirstChange -3 on turns that pass time.
+- Use update_inventory whenever items are gained, consumed, sold, or broken. Use update_quest when goals change.
+
+The story is ALREADY in progress. On connect, you will receive a brief of the current state.
+DO NOT restart or re-welcome. Continue smoothly from where the text narrator left off.`;
+
+const buildVoiceContinuationPrompt = (gs: GameState): string => {
+  const recentHistory = gs.history.slice(-6).map(t => {
+    const role = t.role === 'user' ? 'Player' : 'Narrator';
+    const text = t.text.length > 240 ? t.text.slice(0, 240) + '...' : t.text;
+    return `${role}: ${text}`;
+  }).join('\n');
+
+  const inv = gs.inventory.length
+    ? gs.inventory.slice(0, 15).map(i => `${i.name} [${i.rarity}]`).join(', ')
+    : '(empty)';
+
+  return `SYSTEM: The player just switched to voice mode. The story is in progress — do NOT restart or deliver a welcome.
+
+RECENT STORY:
+${recentHistory || '(none yet — player just started)'}
+
+CURRENT STATE:
+Class: ${gs.playerClass} | Level: ${gs.level} | HP: ${gs.currentHp}/${gs.maxHp} | Hunger: ${gs.hunger} | Thirst: ${gs.thirst}
+Location: ${gs.location?.name || 'the wilds'} (${gs.location?.biome || 'unknown biome'}, ${gs.location?.weather || 'clear'})
+Quest: ${gs.currentQuest || '(none yet)'}
+Inventory: ${inv}
+${gs.activeEnemy ? `Active enemy: ${gs.activeEnemy.name} (HP ${gs.activeEnemy.currentHp}/${gs.activeEnemy.maxHp})` : ''}
+
+Briefly (one line) acknowledge that you're now speaking, then continue the narrative from exactly where it stands. Honor the Realism Charter.`;
+};
+
+
 interface LiveSessionProps {
   isOpen: boolean;
   onClose: () => void;
@@ -19,6 +60,7 @@ interface LiveSessionProps {
   onXpUpdate: XpUpdateHandler;
   onSurvivalUpdate: SurvivalUpdateHandler;
   onInspectItem: (item: InventoryItem) => void;
+  onTranscript: (role: 'user' | 'model', text: string) => void;
 }
 
 const LiveSession: React.FC<LiveSessionProps> = ({ 
@@ -32,7 +74,8 @@ const LiveSession: React.FC<LiveSessionProps> = ({
   onStatUpdate,
   onXpUpdate,
   onSurvivalUpdate,
-  onInspectItem
+  onInspectItem,
+  onTranscript,
 }) => {
   const [status, setStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const [isMicOn, setIsMicOn] = useState(true);
@@ -56,6 +99,8 @@ const LiveSession: React.FC<LiveSessionProps> = ({
 
   const mountedRef = useRef(true);
   const isMicOnRef = useRef(true);
+  const inputTranscriptRef = useRef('');
+  const outputTranscriptRef = useRef('');
 
   const tools: FunctionDeclaration[] = [
     {
@@ -157,11 +202,9 @@ const LiveSession: React.FC<LiveSessionProps> = ({
           onopen: () => {
              if(mountedRef.current) {
                 setStatus('connected');
-                // Trigger narrator welcome immediately
+                // Hand the narrator the story so far so they continue instead of restart.
                 sessionPromise.then(session => {
-                  session.sendRealtimeInput({
-                    text: `SYSTEM: THE PLAYER HAS JUST JOINED VOICE MODE. YOU ARE THE GAME MASTER. IMMEDIATELY SPEAK AND WELCOME THEM BY NAME OR CLASS (${gameState.playerClass}). INTRODUCE THE CURRENT SITUATION AT [[${gameState.location?.name || 'THE START OF THE JOURNEY'}]]. BE ATMOSPHERIC AND MYSTICAL.`
-                  });
+                  session.sendRealtimeInput({ text: buildVoiceContinuationPrompt(gameState) });
                 });
              }
              processor.onaudioprocess = (e) => {
@@ -190,6 +233,23 @@ const LiveSession: React.FC<LiveSessionProps> = ({
               }
             }
 
+            // Accumulate voice transcripts and flush into the shared text history when each side finishes speaking.
+            const inTx = msg.serverContent?.inputTranscription;
+            if (inTx?.text) inputTranscriptRef.current += inTx.text;
+            if (inTx?.finished) {
+              const text = inputTranscriptRef.current.trim();
+              inputTranscriptRef.current = '';
+              if (text) onTranscript('user', text);
+            }
+
+            const outTx = msg.serverContent?.outputTranscription;
+            if (outTx?.text) outputTranscriptRef.current += outTx.text;
+            if (outTx?.finished) {
+              const text = outputTranscriptRef.current.trim();
+              outputTranscriptRef.current = '';
+              if (text) onTranscript('model', text);
+            }
+
             const base64Audio = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio && audioContextRef.current && outputAnalyserRef.current) {
                setIsNarratorSpeaking(true);
@@ -214,7 +274,9 @@ const LiveSession: React.FC<LiveSessionProps> = ({
         config: {
            responseModalities: [Modality.AUDIO],
            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } } },
-           systemInstruction: `You are the mystical Game Master of Infinity Quest. Speak with authority, atmosphere, and flavor. Always respond via audio.`,
+           inputAudioTranscription: {},
+           outputAudioTranscription: {},
+           systemInstruction: VOICE_SYSTEM_INSTRUCTION,
            tools: [{ functionDeclarations: tools }]
         }
       });

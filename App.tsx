@@ -336,6 +336,12 @@ function App() {
              }));
            }}
            onInspectItem={setInspectItem}
+           onTranscript={(role, text) => {
+             setGameState(prev => ({
+               ...prev,
+               history: [...prev.history, { id: newId(), role, text }],
+             }));
+           }}
          />
       )}
 

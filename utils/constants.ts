@@ -14,7 +14,7 @@ export const ADRENALINE_MAX = 100;
 
 export const INITIAL_HP = 20;
 export const SANCTUARY_UPGRADE_BASE_COST = 200;
-export const HISTORY_CONTEXT_WINDOW = 10;
+export const HISTORY_CONTEXT_WINDOW = 20;
 
 export const DEFAULT_STATS: CharacterStats = {
   strength: 10,
