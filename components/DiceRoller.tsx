@@ -70,11 +70,9 @@ const DiceRoller: React.FC<DiceRollerProps> = ({ check, worldRoll, onRollComplet
   }, [worldRoll]);
 
   useEffect(() => {
-    if (worldRoll && result === null) startRoll();
+    if (worldRoll) startRoll();
     return clearTimers;
-  }, [worldRoll, result, startRoll, clearTimers]);
-
-  useEffect(() => clearTimers, [clearTimers]);
+  }, [worldRoll, startRoll, clearTimers]);
 
   const total = result !== null ? result + (check ? modifier : 0) : null;
   const isSuccess = check && total !== null ? total >= check.difficultyClass : true;

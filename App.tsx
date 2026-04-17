@@ -127,7 +127,18 @@ function App() {
         `Skill Check Result: Roll ${roll} + Modifier ${modifier} = ${roll + modifier}. Success: ${success}. Difficulty was ${dc}.`,
       );
     } else if (activeWorldRoll) {
+      const { label, result: preset } = activeWorldRoll;
       setActiveWorldRoll(null);
+      // Feed the world roll result back so the AI can narrate the consequence.
+      // Skip if the AI pre-supplied a result (it already resolved the outcome in-narrative).
+      if (preset === undefined || preset === null) {
+        const outcome = roll === 20 ? 'critical success' : roll === 1 ? 'critical failure' : roll >= 15 ? 'success' : roll >= 8 ? 'partial success' : 'failure';
+        processTurn(
+          'Continue.',
+          false,
+          `World Roll Result: "${label}" rolled ${roll}/20 (${outcome}). Narrate the consequence of this roll and continue the story. Do not request another worldRoll on this turn.`,
+        );
+      }
     }
   }, [activeSkillCheck, activeWorldRoll, gameState.stats, processTurn]);
 
