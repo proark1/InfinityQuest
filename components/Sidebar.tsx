@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CodexEntry, GameState, Language, ItemRarity, InventoryItem } from '../types';
-import { Backpack, BicepsFlexed, Brain, Activity, Trophy, Zap, Sword, Book, MapPin, Skull, Heart, Hammer, Sparkles, Utensils, Droplets, Flame, Coins, Medal, Flag, User, Eye, Shield, Gem, ChevronRight, Swords } from 'lucide-react';
+import { Backpack, BicepsFlexed, Brain, Activity, Trophy, Zap, Sword, Book, MapPin, Skull, Heart, Hammer, Sparkles, Utensils, Droplets, Flame, Coins, Medal, Flag, User, Eye, Shield, Gem, ChevronRight, Swords, HeartHandshake, PawPrint } from 'lucide-react';
 import { SoundManager } from '../utils/soundEffects';
 import { isSafeImageUrl } from '../utils/safety';
 
@@ -210,6 +210,42 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, className = '', language, 
                   <EquipSlotBox label="Trinket" name={gameState.equipped?.trinket} icon={<Gem size={14} />} />
                </div>
             </div>
+
+            {gameState.companion && (
+               <div className="bg-slate-800/40 p-3 rounded-xl border border-emerald-900/30 space-y-2">
+                  <div className="flex items-center gap-2 text-emerald-400 text-[8px] font-black uppercase tracking-widest border-b border-emerald-900/20 pb-1.5">
+                     <HeartHandshake size={12} /> Companion
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {isSafeImageUrl(gameState.companion.portraitUrl) ? (
+                      <img
+                        src={gameState.companion.portraitUrl}
+                        alt={`${gameState.companion.name} portrait`}
+                        className="w-10 h-10 rounded-full object-cover border border-emerald-500/40 flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center flex-shrink-0">
+                        <PawPrint size={14} className="text-emerald-400" aria-hidden="true" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                       <div className="text-white font-black text-[11px] leading-tight truncate">{gameState.companion.name}</div>
+                       <div className="text-[9px] text-slate-400 italic truncate">{gameState.companion.species}</div>
+                       <div className="mt-1 flex items-center gap-1.5">
+                         <div className="text-[8px] font-black text-emerald-400 uppercase tracking-wider">
+                           Bond L{gameState.companion.bondLevel ?? 0}
+                         </div>
+                         <div className="flex-1 h-1 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                           <div
+                             className="h-full bg-gradient-to-r from-emerald-700 to-emerald-400 transition-all duration-1000"
+                             style={{ width: `${Math.min(100, ((gameState.companion.bondXp ?? 0) / 10) * 100)}%` }}
+                           />
+                         </div>
+                       </div>
+                    </div>
+                  </div>
+               </div>
+            )}
 
             {gameState.location && (
                <div className="bg-slate-800/40 p-4 rounded-xl border border-slate-700/50 space-y-2 text-center">

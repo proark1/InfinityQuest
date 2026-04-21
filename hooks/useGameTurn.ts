@@ -114,6 +114,25 @@ export function useGameTurn({
         setGameState(prev => ({ ...prev, history: historyWithUser }));
       }
 
+      // --- Director staging -----------------------------------------------
+      // Heuristic: if the player is stuck (≥3 failed checks in a row or
+      // several low-stakes turns without act progress), escalate the hook.
+      // If they're cruising (≥3 successes in a row), tighten the screws.
+      // Once we fire, skip for the next 6 turns so the world doesn't whiplash.
+      const stats = current.directorStats ?? { failedChecksInARow: 0, successesInARow: 0, lowStakeTurns: 0, lastInterventionTurn: -999 };
+      const turnIndex = historyWithUser.length;
+      let directorNote: string | undefined;
+      const cooled = turnIndex - stats.lastInterventionTurn > 6;
+      if (cooled && !current.activeEnemy && !current.activeMerchant && !isInitial) {
+        if (stats.failedChecksInARow >= 3 || stats.lowStakeTurns >= 5) {
+          directorNote = 'The player is drifting. Introduce a clearer hook this turn — a messenger, a distant horn, a trail of smoke — and re-orient toward the current quest. Do not punish them; re-invite them.';
+        } else if (stats.successesInARow >= 3) {
+          directorNote = 'The player is cruising. Raise the stakes tastefully — a setback, a complication, or a consequence from a past choice. Keep it fair; no sudden deaths.';
+        }
+      }
+
+      const knownFaces = currentMeta.npcPortraits ? Object.keys(currentMeta.npcPortraits) : [];
+
       try {
         const aiResponse = await generateStoryTurn(
           historyWithUser
@@ -148,6 +167,11 @@ export function useGameTurn({
           current.abilities,
           current.abilityCooldowns,
           current.equipped,
+          {
+            companion: current.companion,
+            knownFaces,
+            directorNote,
+          },
         );
 
         if (aiResponse.worldRoll) {
@@ -241,6 +265,21 @@ export function useGameTurn({
             ? 'Starvation and dehydration'
             : newHunger === 0 ? 'Starvation' : 'Dehydration';
 
+          // Director stats — tick lowStakeTurns unless this turn made progress,
+          // carry the fail/success streak, and bank the intervention if fired.
+          const progressMade = !!aiResponse.combat?.enemyDefeated
+            || (aiResponse.actProgressChange ?? 0) > 0
+            || (aiResponse.newCodexEntries?.length ?? 0) > 0
+            || !!aiResponse.merchant
+            || (aiResponse.newAbilities?.length ?? 0) > 0;
+          const prevStats = prev.directorStats ?? { failedChecksInARow: 0, successesInARow: 0, lowStakeTurns: 0, lastInterventionTurn: -999 };
+          const nextDirectorStats = {
+            failedChecksInARow: prevStats.failedChecksInARow,
+            successesInARow: prevStats.successesInARow,
+            lowStakeTurns: progressMade ? 0 : prevStats.lowStakeTurns + 1,
+            lastInterventionTurn: directorNote ? turnIndex : prevStats.lastInterventionTurn,
+          };
+
           const nextState: GameState = {
             ...prev,
             inventory: mergedInventory,
@@ -253,6 +292,9 @@ export function useGameTurn({
             currentHp: newHp,
             hunger: newHunger,
             thirst: newThirst,
+            currentBeat: aiResponse.nextBeat ?? prev.currentBeat,
+            sideLead: aiResponse.sideLead ?? prev.sideLead,
+            directorStats: nextDirectorStats,
             foundShrine: aiResponse.foundShrine === true ? true : prev.foundShrine,
             adrenaline: Math.min(
               ADRENALINE_MAX,
@@ -361,6 +403,24 @@ export function useGameTurn({
             SoundManager.playEnemyDefeat();
             nextState.activeEnemy = undefined;
             addFloatingText('VANQUISHED!', 'info');
+            // Companion bond: +2 XP per shared combat victory.
+            if (prev.companion) {
+              const comp = { ...prev.companion };
+              const xp = (comp.bondXp ?? 0) + 2;
+              if (xp >= 10) {
+                comp.bondLevel = Math.min(10, (comp.bondLevel ?? 0) + 1);
+                comp.bondXp = xp - 10;
+              } else {
+                comp.bondXp = xp;
+              }
+              nextState.companion = comp;
+            }
+          }
+
+          // New companion joins the run.
+          if (aiResponse.newCompanion) {
+            nextState.companion = { bondLevel: 0, bondXp: 0, bondMemories: [], ...aiResponse.newCompanion };
+            addFloatingText(`${aiResponse.newCompanion.name} joins you`, 'xp');
           }
 
           // Nemesis resolution — the narrator signals the killer of a past hero
@@ -411,6 +471,23 @@ export function useGameTurn({
                 ? { ...prev, activeEnemy: { ...prev.activeEnemy, imageUrl: url } }
                 : prev,
             );
+          }).catch(() => { /* non-fatal — image cost is already capped */ });
+        }
+
+        // NPC face memory. Gen one portrait per unseen name per turn, max 2.
+        const requested = aiResponse.npcPortraits ?? [];
+        if (requested.length > 0) {
+          const known = new Set(Object.keys(metaRef.current.npcPortraits ?? {}));
+          const toFetch = requested.filter(r => r.name && r.prompt && !known.has(r.name)).slice(0, 2);
+          toFetch.forEach(req => {
+            generateCharacterImage(req.prompt).then(url => {
+              if (!url) return;
+              setMetaState(m => {
+                const existing = m.npcPortraits ?? {};
+                if (existing[req.name]) return m; // race with another turn
+                return { ...m, npcPortraits: { ...existing, [req.name]: url } };
+              });
+            }).catch(() => { /* non-fatal */ });
           });
         }
       } catch (error) {

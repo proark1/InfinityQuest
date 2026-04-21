@@ -147,7 +147,10 @@ const ActionOverlay: React.FC<ActionOverlayProps> = ({ gameState, onAction, onPl
   const choices = lastTurn && lastTurn.choices ? lastTurn.choices : [];
   return (
      <div className="absolute bottom-24 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none">
-        <div className="flex flex-wrap gap-2 justify-center max-w-4xl pointer-events-auto">
+        <div
+          data-tutorial="chips"
+          className="flex flex-wrap gap-2 justify-center max-w-4xl pointer-events-auto"
+        >
            {choices.map((choice, idx) => (
               <button
                  key={idx}
@@ -156,10 +159,12 @@ const ActionOverlay: React.FC<ActionOverlayProps> = ({ gameState, onAction, onPl
                  disabled={disabled}
                  className="bg-slate-900/90 backdrop-blur border border-slate-600 hover:border-amber-500 text-slate-200 px-5 py-3 rounded-full shadow-lg transition-all hover:scale-105 active:scale-95 text-sm font-medium flex items-center gap-2 group"
               >
+                 <span className="text-[10px] font-black text-amber-500/70 min-w-[10px] text-center">{idx < 3 ? idx + 1 : ''}</span>
                  {choice} <ArrowRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity -ml-2 group-hover:ml-0" />
               </button>
            ))}
            <button
+              data-tutorial="camp"
               onClick={() => { SoundManager.playClick(); onMakeCamp(); }}
               onMouseEnter={() => SoundManager.playHover()}
               disabled={disabled}

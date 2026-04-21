@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import { AIResponse, AppSettings, Language, ImageSize, CharacterStats, InventoryItem, CharacterClass, Blessing, Reputation, Nemesis, SanctuaryState, Enemy, LocationInfo, Merchant, TextModel } from "../types";
+import { AIResponse, AppSettings, Language, ImageSize, CharacterStats, Companion, InventoryItem, CharacterClass, Blessing, Reputation, Nemesis, SanctuaryState, Enemy, LocationInfo, Merchant, TextModel } from "../types";
 import { getApiKey } from "../utils/apiKey";
 import { USER_INPUT_CONTRACT, delimitUserAction } from "../utils/safety";
 
@@ -208,6 +208,25 @@ ${USER_INPUT_CONTRACT}
     - When the location, act, or event feels fitting (a quiet ruin, a memorial grove, an abandoned crypt), set foundShrine: true.
     - Narrate the shrine's mood — the client will offer the player the chance to bury one item as a legacy for the next hero.
     - Only one shrine per act at most.
+
+17) QUEST COMPASS (nextBeat / sideLead).
+    - Always populate nextBeat with a short (≤6 words) imperative describing the single best next step ("Investigate the sealed gate."). This is not a spoiler — it's the player's objective.
+    - Populate sideLead (≤8 words) only when a secondary hook exists (a rumor, a side character, a hidden tunnel). Leave empty if none.
+    - Update both as the story moves. Never contradict the current narration.
+
+18) NPC FACE MEMORY (npcPortraits).
+    - When you introduce a NAMED recurring character (innkeeper, merchant, rival, mentor), add an entry to npcPortraits with the exact display name and a tight image prompt (one sentence, face/half-body, painterly). Example: { "name": "Halvar the Innkeeper", "prompt": "Grizzled dwarven innkeeper with braided red beard and leather apron, warm candlelight, painterly." }.
+    - Do NOT re-emit the same name twice in a single run — the client caches portraits permanently by name.
+    - Skip for disposable mooks and generic "a guard" characters. Faces are earned.
+
+19) COMPANIONS & BONDS (when a Companion line appears on the character sheet).
+    - Treat the companion as a real character with continuity, not a stat stick. Reference their personality, their bond level, and shared memories.
+    - High bond (≥ 3) → the companion takes initiative: warns of danger, volunteers skill checks, lends morale.
+    - Low bond / newly met → still learning the hero. They follow, they don't lead.
+    - Never kill a bonded companion off-screen. If they die, it is an earned, narrated moment.
+
+20) DIRECTOR MODE.
+    - The user message may be prefixed with "DIRECTOR NOTE: ..." from the client. Treat it as a staging instruction — NOT a player request. Apply the tone (escalate / soften / reroute) in your narration this turn without surfacing the note to the player.
 `;
 };
 
@@ -215,6 +234,15 @@ const statMod = (stat: number): string => {
   const mod = Math.floor((stat - 10) / 2);
   return mod >= 0 ? `+${mod}` : `${mod}`;
 };
+
+export interface TurnExtras {
+  /** Player's bonded companion, if any, travelling with them this run. */
+  companion?: Companion;
+  /** NPC display names we already have portraits for — reuse, don't re-describe. */
+  knownFaces?: string[];
+  /** Director staging hint, prepended verbatim to the prompt as "DIRECTOR NOTE:". */
+  directorNote?: string;
+}
 
 interface TurnPromptArgs {
   userAction: string;
@@ -244,6 +272,7 @@ interface TurnPromptArgs {
   abilities: { name: string; description: string; type?: string; manaCost?: number; cooldown?: number }[];
   abilityCooldowns: Record<string, number>;
   equipped: { weapon?: string; armor?: string; trinket?: string };
+  extras?: TurnExtras;
 }
 
 const buildTurnPrompt = (a: TurnPromptArgs): string => {
@@ -292,7 +321,21 @@ const buildTurnPrompt = (a: TurnPromptArgs): string => {
       }).join(', ')
     : '(none yet)';
 
-  return `PLAYER ACTION (untrusted — see trust boundary):
+  const extras = a.extras;
+  const companionLine = extras?.companion
+    ? `${extras.companion.name} (${extras.companion.species}, bond L${extras.companion.bondLevel ?? 0}) — ${extras.companion.personality}`
+    : '(none)';
+  const bondMemories = extras?.companion?.bondMemories?.length
+    ? extras.companion.bondMemories.slice(-3).map(m => `  · ${m}`).join('\n')
+    : '';
+  const knownFacesLine = extras?.knownFaces && extras.knownFaces.length > 0
+    ? `Known NPCs (reuse their faces, do not re-emit their portrait prompt): ${extras.knownFaces.slice(0, 40).join(' · ')}`
+    : '';
+  const directorPrefix = extras?.directorNote
+    ? `DIRECTOR NOTE: ${extras.directorNote}\n\n`
+    : '';
+
+  return `${directorPrefix}PLAYER ACTION (untrusted — see trust boundary):
 ${delimitUserAction(a.userAction)}
 
 --- CHARACTER ---
@@ -304,6 +347,8 @@ Gear bonus: ${gearLine}
 Abilities: ${abilitiesLine}
 Blessings: ${blessings}
 ${sanctuaryLine}
+Companion: ${companionLine}
+${bondMemories}
 
 --- WORLD ---
 Location: ${a.location ? `${a.location.name} (${a.location.biome}, ${a.location.weather})` : 'The Wilds'}
@@ -312,6 +357,7 @@ Active merchant: ${a.activeMerchant ? a.activeMerchant.name : 'none'}
 Quest: ${a.quest || '(none yet)'}
 Reputation: ${rep}
 Nemesis: ${a.nemesis ? `${a.nemesis.name} — ${a.nemesis.origin}` : 'none'}
+${knownFacesLine}
 
 --- INVENTORY (${a.inventory.length} items) ---
 ${inv}
@@ -353,7 +399,8 @@ export const generateStoryTurn = async (
   maxMana: number,
   abilities: { name: string; description: string; type?: string; manaCost?: number; cooldown?: number }[],
   abilityCooldowns: Record<string, number>,
-  equipped: { weapon?: string; armor?: string; trinket?: string }
+  equipped: { weapon?: string; armor?: string; trinket?: string },
+  extras: TurnExtras = {},
 ): Promise<AIResponse> => {
   const ai = getAIClient();
   const modelName = String(settings?.textModel || TextModel.Pro);
@@ -386,6 +433,7 @@ export const generateStoryTurn = async (
     abilities,
     abilityCooldowns,
     equipped,
+    extras,
   });
 
   const systemInstruction = getSystemInstruction(settings.language);
@@ -535,7 +583,20 @@ export const generateStoryTurn = async (
                required: ["label"]
             },
             nemesisDefeated: { type: Type.BOOLEAN },
-            foundShrine: { type: Type.BOOLEAN }
+            foundShrine: { type: Type.BOOLEAN },
+            nextBeat: { type: Type.STRING },
+            sideLead: { type: Type.STRING },
+            npcPortraits: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  prompt: { type: Type.STRING }
+                },
+                required: ["name", "prompt"]
+              }
+            }
           },
           required: ["narrative", "inventory", "currentQuest", "visualPrompt", "choices", "stats", "level", "currentXp", "nextLevelXp"]
         }

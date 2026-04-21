@@ -108,6 +108,14 @@ export const INITIAL_META_STATE: MetaState = {
   unlockedClasses: DEFAULT_UNLOCKED_CLASSES,
   typewriterSpeed: 'normal',
   nemesesDefeated: 0,
+  tutorialCompleted: false,
+  nudgesEnabled: true,
+  masterVolume: 0.6,
+  musicVolume: 0.5,
+  sfxEnabled: true,
+  musicEnabled: true,
+  bondedCompanions: [],
+  npcPortraits: {},
 };
 
 export const REPUTATION_STATUS = (value: number): Reputation['status'] => {

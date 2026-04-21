@@ -33,6 +33,9 @@ import AbilityHotbar from './components/AbilityHotbar';
 import AchievementToast from './components/AchievementToast';
 import CodexEntryModal from './components/CodexEntryModal';
 import ShrineModal from './components/ShrineModal';
+import Tutorial from './components/Tutorial';
+import NudgeToast from './components/NudgeToast';
+import QuestCompass from './components/QuestCompass';
 import { effectiveStats, inferSlot } from './utils/equipment';
 import { SoundManager } from './utils/soundEffects';
 import { checkApiKey, generateAudio, isAiStudioAvailable, requestApiKey } from './services/geminiService';
@@ -56,7 +59,9 @@ import { usePersistedMetaState } from './hooks/usePersistedMetaState';
 import { useFloatingTexts } from './hooks/useFloatingTexts';
 import { useGameTurn } from './hooks/useGameTurn';
 import { useAchievementEngine } from './hooks/useAchievementEngine';
+import { useAmbient } from './hooks/useAmbient';
 import { applyArmoryRarityUpgrade, computeSanctuaryBonuses } from './utils/progression';
+import { Nudge, selectNudge } from './utils/nudges';
 
 const INITIAL_PROMPTS: Record<Language, string> = {
   [Language.English]: 'Start the adventure. I have just arrived in the region.',
@@ -98,6 +103,9 @@ function App() {
   const [activeWorldRoll, setActiveWorldRoll] = useState<WorldRoll | null>(null);
   const [pendingLegacyItem, setPendingLegacyItem] = useState<LegacyItem | null>(null);
   const [inspectCodexEntry, setInspectCodexEntry] = useState<CodexEntry | null>(null);
+  const [showTutorial, setShowTutorial] = useState<boolean>(false);
+  const [activeNudge, setActiveNudge] = useState<Nudge | null>(null);
+  const seenNudgesRef = useRef<string[]>([]);
 
   const [settings, setSettings] = useState<AppSettings>({
     textModel: TextModel.Pro,
@@ -139,6 +147,37 @@ function App() {
     setGameState,
     setMetaState,
   });
+
+  useAmbient(gameState, metaState, gameStarted);
+
+  // Kick off the tutorial the first time a run actually starts (not during
+  // the save-loaded screen). Gate behind `tutorialCompleted` so returning
+  // players don't get quizzed again.
+  useEffect(() => {
+    if (!gameStarted) return;
+    if (metaState.tutorialCompleted) return;
+    if (gameState.history.length < 1) return; // let the opening narration start
+    setShowTutorial(true);
+  }, [gameStarted, metaState.tutorialCompleted, gameState.history.length]);
+
+  const completeTutorial = useCallback(() => {
+    setShowTutorial(false);
+    setMetaState(prev => ({ ...prev, tutorialCompleted: true }));
+  }, [setMetaState]);
+
+  // Nudges: on every game-state change, ask the rule list if any tip applies,
+  // honoring user preference and a per-run dedupe list (see seenNudgesRef).
+  useEffect(() => {
+    if (metaState.nudgesEnabled === false) return;
+    if (!gameStarted || gameState.isGameOver || gameState.isVictory) return;
+    if (showTutorial) return;
+    if (activeNudge) return;
+    const next = selectNudge(gameState, seenNudgesRef.current);
+    if (next) {
+      seenNudgesRef.current = [...seenNudgesRef.current, next.id].slice(-20);
+      setActiveNudge(next);
+    }
+  }, [gameState, metaState.nudgesEnabled, gameStarted, showTutorial, activeNudge]);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -249,6 +288,19 @@ function App() {
       const success = roll + modifier >= (activeSkillCheck.difficultyClass || 10);
       const dc = activeSkillCheck.difficultyClass;
       setActiveSkillCheck(null);
+      // Feed the outcome into the director's fail/success streak counters so
+      // the next-turn staging hint can react.
+      setGameState(prev => {
+        const s = prev.directorStats ?? { failedChecksInARow: 0, successesInARow: 0, lowStakeTurns: 0, lastInterventionTurn: -999 };
+        return {
+          ...prev,
+          directorStats: {
+            ...s,
+            failedChecksInARow: success ? 0 : s.failedChecksInARow + 1,
+            successesInARow: success ? s.successesInARow + 1 : 0,
+          },
+        };
+      });
       processTurn(
         success ? 'I succeeded in my attempt.' : 'I failed in my attempt.',
         false,
@@ -404,24 +456,47 @@ function App() {
   }, []);
 
   const handleRunEnd = useCallback((shardsEarned: number, causeOfDeath: string) => {
-    setMetaState(prev => ({
-      ...prev,
-      soulShards: prev.soulShards + shardsEarned,
-      ascensionLevel: causeOfDeath === 'Ascended' ? prev.ascensionLevel + 1 : prev.ascensionLevel,
-      pastHeroes: [
-        ...prev.pastHeroes,
-        {
-          id: newId(),
-          name: gameState.title,
-          class: gameState.playerClass,
-          level: gameState.level,
-          causeOfDeath: causeOfDeath === 'Ascended' ? 'Ascended' : gameState.gameOverCause || causeOfDeath,
-          score: shardsEarned,
-          date: Date.now(),
-          ascensionLevel: gameState.ascensionLevel,
-        },
-      ],
-    }));
+    setMetaState(prev => {
+      // Save (or update) the bond with the companion who walked with this hero.
+      let bondedCompanions = prev.bondedCompanions ?? [];
+      if (gameState.companion) {
+        const existing = bondedCompanions.find(c => c.name === gameState.companion!.name);
+        const merged = {
+          name: gameState.companion.name,
+          species: gameState.companion.species,
+          personality: gameState.companion.personality,
+          portraitUrl: gameState.companion.portraitUrl,
+          bondLevel: gameState.companion.bondLevel ?? existing?.bondLevel ?? 0,
+          bondXp: gameState.companion.bondXp ?? existing?.bondXp ?? 0,
+          bondMemories: (gameState.companion.bondMemories ?? existing?.bondMemories ?? []).slice(-8),
+          lastSeenAt: Date.now(),
+          lastSeenWith: gameState.title,
+        };
+        bondedCompanions = [
+          merged,
+          ...bondedCompanions.filter(c => c.name !== merged.name),
+        ].slice(0, 6);
+      }
+      return {
+        ...prev,
+        soulShards: prev.soulShards + shardsEarned,
+        ascensionLevel: causeOfDeath === 'Ascended' ? prev.ascensionLevel + 1 : prev.ascensionLevel,
+        bondedCompanions,
+        pastHeroes: [
+          ...prev.pastHeroes,
+          {
+            id: newId(),
+            name: gameState.title,
+            class: gameState.playerClass,
+            level: gameState.level,
+            causeOfDeath: causeOfDeath === 'Ascended' ? 'Ascended' : gameState.gameOverCause || causeOfDeath,
+            score: shardsEarned,
+            date: Date.now(),
+            ascensionLevel: gameState.ascensionLevel,
+          },
+        ],
+      };
+    });
     resetGame();
   }, [gameState, resetGame, setMetaState]);
 
@@ -440,6 +515,8 @@ function App() {
       <VisualEffectsLayer gameState={gameState} />
       <FloatingTextLayer items={floatingTexts} />
       <AchievementToast achievement={activeAchievement} onClose={dismissAchievement} />
+      <NudgeToast nudge={activeNudge} onDismiss={() => setActiveNudge(null)} />
+      <Tutorial open={showTutorial} onComplete={completeTutorial} />
       {persistWarning && (
         <div
           role="alert"
@@ -483,6 +560,7 @@ function App() {
               <header className="h-16 border-b border-slate-800 bg-slate-900/50 backdrop-blur flex items-center justify-between px-4">
                  <div className="flex items-center gap-4">
                     <button
+                      data-tutorial="sidebar-toggle"
                       onClick={() => setSidebarOpen(true)}
                       className="lg:hidden p-3 min-h-[44px] min-w-[44px] text-slate-400 hover:text-white"
                       aria-label="Open sidebar"
@@ -556,25 +634,12 @@ function App() {
 
               <div className="bg-slate-900 border-t border-slate-800 p-3 sm:p-4 z-10">
                  <div className="max-w-3xl mx-auto space-y-2">
-                    {suggestedChips.length > 0 && !loading && !activeSkillCheck && !activeWorldRoll && (
-                      <div className="flex flex-wrap gap-2" role="group" aria-label="Suggested actions">
-                        {suggestedChips.map((chip, i) => (
-                          <button
-                            key={`${chip}-${i}`}
-                            onClick={() => {
-                              SoundManager.playClick();
-                              processTurn(chip);
-                            }}
-                            className="px-3 py-2 bg-slate-800 hover:bg-amber-600 hover:text-white text-slate-200 text-xs sm:text-sm rounded-full border border-slate-700 hover:border-amber-500 transition-all min-h-[36px] flex items-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
-                            aria-label={`Suggested action ${i + 1}: ${chip}`}
-                          >
-                            <span className="text-[9px] font-black text-amber-500 opacity-60">{i + 1}</span>
-                            <span className="truncate max-w-[240px]">{chip}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex gap-2">
+                    <QuestCompass
+                      quest={gameState.currentQuest}
+                      nextBeat={gameState.currentBeat}
+                      sideLead={gameState.sideLead}
+                    />
+                    <div className="flex gap-2" data-tutorial="input">
                       <input
                         ref={inputRef}
                         type="text"
@@ -796,6 +861,9 @@ function App() {
 
                const startingHp = INITIAL_HP + bonuses.bonusHp;
 
+               // Most recent bonded companion (if any) reunites with the hero.
+               const bonded = [...(metaState.bondedCompanions ?? [])].sort((a, b) => b.lastSeenAt - a.lastSeenAt)[0];
+
                // Snapshot meta for the end-of-run reveal so we can diff what
                // the player earned during this run.
                setMetaState(prev => ({
@@ -821,6 +889,17 @@ function App() {
                  portraitUrl: imageUrl,
                  activeNemesis: metaState.activeNemesis,
                  ascensionLevel: metaState.ascensionLevel ?? 0,
+                 companion: bonded
+                   ? {
+                       name: bonded.name,
+                       species: bonded.species,
+                       personality: bonded.personality,
+                       portraitUrl: bonded.portraitUrl,
+                       bondLevel: bonded.bondLevel ?? 0,
+                       bondXp: bonded.bondXp ?? 0,
+                       bondMemories: bonded.bondMemories ?? [],
+                     }
+                   : prev.companion,
                }));
                setGameStarted(true);
                setShowClassSelection(false);
@@ -909,6 +988,19 @@ function App() {
         onNewGame={() => { setSettingsOpen(false); resetGame(); }}
         typewriterSpeed={metaState.typewriterSpeed ?? 'normal'}
         onTypewriterSpeedChange={(speed) => setMetaState(prev => ({ ...prev, typewriterSpeed: speed }))}
+        masterVolume={metaState.masterVolume ?? 0.6}
+        onMasterVolumeChange={(v) => setMetaState(prev => ({ ...prev, masterVolume: v }))}
+        musicVolume={metaState.musicVolume ?? 0.5}
+        onMusicVolumeChange={(v) => setMetaState(prev => ({ ...prev, musicVolume: v }))}
+        musicEnabled={metaState.musicEnabled !== false}
+        onMusicEnabledChange={(v) => setMetaState(prev => ({ ...prev, musicEnabled: v }))}
+        nudgesEnabled={metaState.nudgesEnabled !== false}
+        onNudgesEnabledChange={(v) => setMetaState(prev => ({ ...prev, nudgesEnabled: v }))}
+        onResetTutorial={() => {
+          setMetaState(prev => ({ ...prev, tutorialCompleted: false }));
+          setSettingsOpen(false);
+          if (gameStarted) setShowTutorial(true);
+        }}
       />
       <GameOverModal
         isOpen={gameState.isGameOver}

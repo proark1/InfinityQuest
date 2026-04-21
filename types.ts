@@ -69,6 +69,19 @@ export interface Companion {
   species: string;
   personality: string;
   portraitUrl?: string;
+  /** 0..10. Rises across runs as you adventure together. */
+  bondLevel?: number;
+  /** 0..99 progress toward the next bond level. Rolls over to bondLevel+1 when it hits 100. */
+  bondXp?: number;
+  /** Freeform accumulated memories ("Saved your life in the Ember Tomb"). */
+  bondMemories?: string[];
+}
+
+export interface BondedCompanion extends Companion {
+  /** Epoch ms. Used to sort recent bonds first at reunite-offer time. */
+  lastSeenAt: number;
+  /** The hero this companion walked with last. Gives the reunion flavor. */
+  lastSeenWith?: string;
 }
 
 export interface Enemy {
@@ -223,6 +236,19 @@ export interface MetaState {
   typewriterSpeed: TypewriterSpeed; // UI preference, persists across runs
   nemesesDefeated: number; // Lifetime count; grants the Avenger badge
   runSnapshot?: RunSnapshot; // Refreshed when a run starts, read at run end
+  /** First-run onboarding has been completed at least once on this machine. */
+  tutorialCompleted?: boolean;
+  /** User has not disabled context-sensitive toasts. Defaults to on. */
+  nudgesEnabled?: boolean;
+  /** Persistent audio preferences. Split so players can mute music and keep SFX. */
+  masterVolume?: number; // 0..1
+  musicVolume?: number;  // 0..1
+  sfxEnabled?: boolean;  // defaults true
+  musicEnabled?: boolean; // defaults true
+  /** Companions persist across runs; we offer a reunion on the next run. */
+  bondedCompanions?: BondedCompanion[];
+  /** Cached NPC portrait URLs keyed by exact name. Survives runs. */
+  npcPortraits?: Record<string, string>;
 }
 
 export interface GameState {
@@ -283,6 +309,18 @@ export interface GameState {
   
   // Run Specific
   foundShrine?: boolean; // If true, UI allows burying an item
+
+  // AI director / quest compass. Short strings shown above the input.
+  currentBeat?: string; // "Find a way into the temple."
+  sideLead?: string;    // "The bard mentioned a hidden tunnel."
+
+  // Counters the director uses to detect stuck/cruising patterns.
+  directorStats?: {
+    failedChecksInARow: number;
+    successesInARow: number;
+    lowStakeTurns: number; // turns without meaningful progress
+    lastInterventionTurn: number; // index into history
+  };
 }
 
 export interface GameTurn {
@@ -365,6 +403,18 @@ export interface AIResponse {
 
   // True if the narrator confirms the active nemesis was slain this turn.
   nemesisDefeated?: boolean;
+
+  // Quest compass strings — shown above the action input.
+  nextBeat?: string;
+  sideLead?: string;
+
+  // If the AI wants a durable NPC portrait, it emits prompts the client can
+  // fulfill (and cache) once per name. Rate-limited by the client.
+  npcPortraits?: { name: string; prompt: string }[];
+
+  // Skill-check outcome threaded back so the director can notice fail/success
+  // streaks. Populated by the client after a roll, not by the model.
+  skillCheckOutcome?: 'success' | 'failure' | 'critSuccess' | 'critFailure';
 }
 
 export enum ImageSize {
