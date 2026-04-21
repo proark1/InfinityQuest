@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AppSettings, ImageSize, TextModel, Language, TypewriterSpeed } from '../types';
-import { X, Settings, Globe, RefreshCcw, KeyRound, Type } from 'lucide-react';
+import { X, Settings, Globe, RefreshCcw, KeyRound, Type, Volume2, VolumeX, Music, Lightbulb } from 'lucide-react';
 import { clearApiKey, getApiKey, isStoredInLocalStorage, maskKey, setApiKey } from '../utils/apiKey';
 import { useModal } from '../hooks/useModal';
 
@@ -12,6 +12,15 @@ interface SettingsModalProps {
   onNewGame: () => void;
   typewriterSpeed: TypewriterSpeed;
   onTypewriterSpeedChange: (speed: TypewriterSpeed) => void;
+  masterVolume: number;
+  onMasterVolumeChange: (v: number) => void;
+  musicVolume: number;
+  onMusicVolumeChange: (v: number) => void;
+  musicEnabled: boolean;
+  onMusicEnabledChange: (v: boolean) => void;
+  nudgesEnabled: boolean;
+  onNudgesEnabledChange: (v: boolean) => void;
+  onResetTutorial: () => void;
 }
 
 const SPEED_OPTIONS: { value: TypewriterSpeed; label: string; desc: string }[] = [
@@ -21,7 +30,24 @@ const SPEED_OPTIONS: { value: TypewriterSpeed; label: string; desc: string }[] =
   { value: 'slow', label: 'Slow', desc: '28ms / chunk' },
 ];
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings, onSettingsChange, onNewGame, typewriterSpeed, onTypewriterSpeedChange }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({
+  isOpen,
+  onClose,
+  settings,
+  onSettingsChange,
+  onNewGame,
+  typewriterSpeed,
+  onTypewriterSpeedChange,
+  masterVolume,
+  onMasterVolumeChange,
+  musicVolume,
+  onMusicVolumeChange,
+  musicEnabled,
+  onMusicEnabledChange,
+  nudgesEnabled,
+  onNudgesEnabledChange,
+  onResetTutorial,
+}) => {
   const [editingKey, setEditingKey] = useState(false);
   const [draftKey, setDraftKey] = useState('');
   const [showKey, setShowKey] = useState(false);
@@ -232,6 +258,75 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
             </div>
             <p className="text-[11px] text-slate-500">Tip: press Space while the narrator types to skip to the end.</p>
           </div>
+
+          {/* Audio */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label htmlFor="master-vol" className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                {masterVolume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                Master Volume
+              </label>
+              <span className="text-xs text-slate-500 tabular-nums">{Math.round(masterVolume * 100)}%</span>
+            </div>
+            <input
+              id="master-vol"
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={masterVolume}
+              onChange={(e) => onMasterVolumeChange(parseFloat(e.target.value))}
+              className="w-full accent-amber-500"
+            />
+
+            <div className="flex items-center justify-between">
+              <label htmlFor="music-vol" className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                <Music size={16} /> Music & Ambience
+              </label>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-500 tabular-nums">{Math.round(musicVolume * 100)}%</span>
+                <button
+                  onClick={() => onMusicEnabledChange(!musicEnabled)}
+                  className={`w-11 h-6 rounded-full relative transition-colors ${musicEnabled ? 'bg-amber-500' : 'bg-slate-700'}`}
+                  aria-label="Toggle music & ambience"
+                  aria-pressed={musicEnabled}
+                >
+                  <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${musicEnabled ? 'left-6' : 'left-1'}`} />
+                </button>
+              </div>
+            </div>
+            <input
+              id="music-vol"
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={musicVolume}
+              onChange={(e) => onMusicVolumeChange(parseFloat(e.target.value))}
+              disabled={!musicEnabled}
+              className="w-full accent-amber-500 disabled:opacity-40"
+            />
+            <p className="text-[11px] text-slate-500">Procedurally generated soundscape — drones, weather, and combat tension. No files, no tracking.</p>
+          </div>
+
+          {/* Nudges + tutorial */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-slate-300 flex items-center gap-2"><Lightbulb size={16} /> Helpful Tips</span>
+            <button
+              onClick={() => onNudgesEnabledChange(!nudgesEnabled)}
+              className={`w-11 h-6 rounded-full relative transition-colors ${nudgesEnabled ? 'bg-amber-500' : 'bg-slate-700'}`}
+              aria-label="Toggle contextual nudges"
+              aria-pressed={nudgesEnabled}
+            >
+              <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${nudgesEnabled ? 'left-6' : 'left-1'}`} />
+            </button>
+          </div>
+          <button
+            onClick={onResetTutorial}
+            className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-slate-700"
+          >
+            Replay First-Run Tutorial
+          </button>
 
           {/* Auto Image Toggle */}
           <div className="flex items-center justify-between">
