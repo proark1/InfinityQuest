@@ -10,8 +10,7 @@ export function getApiKey(): string | null {
   } catch {
     // localStorage unavailable (private mode, etc.)
   }
-  const envKey = (typeof process !== 'undefined' ? process.env?.API_KEY : undefined) || undefined;
-  return envKey && envKey.trim() ? envKey.trim() : null;
+  return null;
 }
 
 export function setApiKey(key: string): void {

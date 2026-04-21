@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { GameTurn, Language } from '../types';
 import { User, Bot, Sparkles, Volume2, Pause, RefreshCw, Skull } from 'lucide-react';
 import TypewriterText from './TypewriterText';
+import { isSafeImageUrl, isSafeKeyword } from '../utils/safety';
 
 interface StoryFeedProps {
   history: GameTurn[];
@@ -97,10 +98,10 @@ const StoryFeed: React.FC<StoryFeedProps> = ({ history, isThinking, language, on
                 ) : (
                    turn.text.split('\n').map((paragraph, i) => (
                       paragraph.trim() && <p key={i} className="mb-2 last:mb-0">
-                         {/* Static parse for old turns */}
                          {paragraph.split(/(\[\[.*?\]\])/g).map((part, pi) => {
                             if (part.startsWith('[[') && part.endsWith(']]')) {
                                const kw = part.slice(2, -2);
+                               if (!isSafeKeyword(kw)) return <span key={pi}>{part}</span>;
                                return (
                                   <button
                                      key={pi}
@@ -149,7 +150,7 @@ const StoryFeed: React.FC<StoryFeedProps> = ({ history, isThinking, language, on
                 )}
               </div>
 
-              {turn.imageUrl && (
+              {isSafeImageUrl(turn.imageUrl) && (
                  <div className="mt-4 rounded-xl overflow-hidden border border-slate-700 shadow-2xl max-w-full sm:max-w-md animate-fade-in relative group">
                    <img src={turn.imageUrl} alt="Scene visualization" className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-105" />
                  </div>
@@ -169,14 +170,19 @@ const StoryFeed: React.FC<StoryFeedProps> = ({ history, isThinking, language, on
         })}
 
         {isThinking && (
-          <div className="flex gap-4 animate-fade-in">
+          <div className="flex gap-4 animate-fade-in" role="status" aria-live="polite">
             <div className="flex-shrink-0 w-10 h-10 rounded-full bg-amber-600 flex items-center justify-center shadow-lg animate-pulse">
                <Bot size={20} />
             </div>
-            <div className="flex items-center gap-2 text-slate-400 pt-2">
-              <span className="w-2 h-2 bg-slate-500 rounded-full animate-[bounce_1.4s_infinite_0ms]" />
-              <span className="w-2 h-2 bg-slate-500 rounded-full animate-[bounce_1.4s_infinite_200ms]" />
-              <span className="w-2 h-2 bg-slate-500 rounded-full animate-[bounce_1.4s_infinite_400ms]" />
+            <div className="flex flex-col gap-1 pt-2">
+              <span className="text-sm text-slate-400 italic">
+                {isGerman ? 'Der Erzähler webt dein Schicksal…' : 'The narrator is weaving your fate…'}
+              </span>
+              <div className="flex items-center gap-2 text-slate-400">
+                <span className="w-2 h-2 bg-slate-500 rounded-full animate-[bounce_1.4s_infinite_0ms]" aria-hidden="true" />
+                <span className="w-2 h-2 bg-slate-500 rounded-full animate-[bounce_1.4s_infinite_200ms]" aria-hidden="true" />
+                <span className="w-2 h-2 bg-slate-500 rounded-full animate-[bounce_1.4s_infinite_400ms]" aria-hidden="true" />
+              </div>
             </div>
           </div>
         )}
@@ -187,4 +193,4 @@ const StoryFeed: React.FC<StoryFeedProps> = ({ history, isThinking, language, on
   );
 };
 
-export default StoryFeed;
+export default React.memo(StoryFeed);

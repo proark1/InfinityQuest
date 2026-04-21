@@ -370,7 +370,22 @@ export function useGameTurn({
           });
         }
       } catch (error) {
-        console.error('Turn generation error:', error);
+        // Error already summarized/logged inside geminiService via logSafe;
+        // surface it to the player as a synthetic narrator turn with a retry hint.
+        const msg = error instanceof Error ? error.message : 'Unexpected error.';
+        setGameState(prev => ({
+          ...prev,
+          history: [
+            ...historyWithUser,
+            {
+              id: newId(),
+              role: 'model',
+              text: `The weave falters… (${msg}) Try a different action, or wait a moment and try again.`,
+              choices: [],
+            },
+          ],
+        }));
+        addFloatingText('Narrator stumbled', 'info');
       } finally {
         setLoading(false);
       }

@@ -43,7 +43,7 @@ const GameOverModal: React.FC<GameOverModalProps> = ({ isOpen, gameState, onCont
   if (!isOpen || !scoreBreakdown) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-1000">
+    <div className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-1000" role="dialog" aria-modal="true" aria-labelledby="gameover-title">
       <div className="max-w-lg w-full bg-slate-900 border border-red-900/50 rounded-2xl p-8 text-center relative overflow-hidden shadow-2xl">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/20 via-slate-900/50 to-slate-950 pointer-events-none" />
         
@@ -52,7 +52,7 @@ const GameOverModal: React.FC<GameOverModalProps> = ({ isOpen, gameState, onCont
              <Skull size={48} className="text-red-500 animate-pulse" />
           </div>
           
-          <h1 className="text-4xl font-bold text-red-500 fantasy-font uppercase tracking-[0.2em] mb-2">
+          <h1 id="gameover-title" className="text-4xl font-bold text-red-500 fantasy-font uppercase tracking-[0.2em] mb-2">
              Fallen Hero
           </h1>
           
@@ -61,7 +61,7 @@ const GameOverModal: React.FC<GameOverModalProps> = ({ isOpen, gameState, onCont
           </p>
           
           {gameState.gameOverCause && (
-             <div className="py-2 px-4 bg-red-950/50 border border-red-900/50 rounded-lg inline-block text-sm text-red-300">
+             <div className="py-2 px-4 bg-red-950/80 border border-red-700/70 rounded-lg inline-block text-sm text-red-100">
                Slain by: <span className="font-bold text-white">{gameState.gameOverCause}</span>
              </div>
           )}

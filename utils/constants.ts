@@ -2,6 +2,15 @@ import { CharacterStats, GameState, MetaState, Reputation, SanctuaryState } from
 
 export const STORAGE_KEY = 'infinity_quest_save_v4';
 export const META_STORAGE_KEY = 'infinity_quest_meta_v1';
+export const CORRUPT_BACKUP_SUFFIX = '_corrupt_backup';
+
+// Incremented whenever GameState / MetaState shape changes in a breaking way.
+// Saves with a mismatched schemaVersion are reset to INITIAL (with a backup kept).
+export const SCHEMA_VERSION = 1;
+
+// Keep the last N turns' base64 images in the persisted save. Older turn images
+// are stripped to keep localStorage under the ~5 MB quota.
+export const PERSISTED_IMAGE_TAIL = 5;
 
 export const FLOATING_TEXT_DURATION_MS = 1500;
 export const ORACLE_COOLDOWN_MS = 24 * 60 * 60 * 1000;

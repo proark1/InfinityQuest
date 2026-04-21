@@ -79,7 +79,15 @@ function App() {
     language: Language.English,
   });
 
-  const { gameState, setGameState, gameStarted, setGameStarted, resetGame } = usePersistedGameState();
+  const {
+    gameState,
+    setGameState,
+    gameStarted,
+    setGameStarted,
+    resetGame,
+    persistWarning,
+    clearPersistWarning,
+  } = usePersistedGameState();
   const { metaState, setMetaState } = usePersistedMetaState();
   const { floatingTexts, addFloatingText } = useFloatingTexts();
 
@@ -323,6 +331,26 @@ function App() {
       <LivingBackground biome={gameState.location?.biome} weather={gameState.location?.weather} />
       <VisualEffectsLayer gameState={gameState} />
       <FloatingTextLayer items={floatingTexts} />
+      {persistWarning && (
+        <div
+          role="alert"
+          className="fixed top-3 left-1/2 -translate-x-1/2 z-[200] bg-amber-900/90 border border-amber-500/60 text-amber-100 text-sm px-4 py-2 rounded-lg shadow-lg flex items-center gap-3"
+        >
+          <AlertTriangle size={16} aria-hidden="true" />
+          <span>
+            {persistWarning === 'corrupt' && 'A corrupted save was reset. A backup copy was kept.'}
+            {persistWarning === 'quota' && 'Browser storage is nearly full — older turn images were dropped to keep saving.'}
+            {persistWarning === 'unavailable' && 'Browser storage is unavailable — progress will not be saved.'}
+          </span>
+          <button
+            onClick={clearPersistWarning}
+            className="ml-2 text-amber-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400 rounded"
+            aria-label="Dismiss notice"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {gameStarted && (
         <div className="flex h-full w-full">
@@ -346,7 +374,7 @@ function App() {
                  <div className="flex items-center gap-4">
                     <button
                       onClick={() => setSidebarOpen(true)}
-                      className="lg:hidden p-2 text-slate-400"
+                      className="lg:hidden p-3 min-h-[44px] min-w-[44px] text-slate-400 hover:text-white"
                       aria-label="Open sidebar"
                     >
                       <Menu />
@@ -363,7 +391,7 @@ function App() {
                     </button>
                     <button
                       onClick={() => setSettingsOpen(true)}
-                      className="p-2 text-slate-400 hover:text-white"
+                      className="p-3 min-h-[44px] min-w-[44px] text-slate-400 hover:text-white"
                       aria-label="Open settings"
                     >
                       <Settings size={20} />
@@ -649,12 +677,19 @@ function ApiKeyGate({ onAiStudioConnect, onManualKey }: ApiKeyGateProps) {
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-700">
         <div className="text-center">
-          <AlertTriangle className="text-amber-500 w-16 h-16 mx-auto mb-6" />
-          <h1 className="text-2xl font-bold text-white mb-2 fantasy-font">Access Required</h1>
-          <p className="text-slate-400 mb-6 text-sm">
-            A Gemini API key is needed for story generation, images, and live voice mode.
+          <AlertTriangle className="text-amber-500 w-16 h-16 mx-auto mb-6" aria-hidden="true" />
+          <h1 className="text-2xl font-bold text-white mb-2 fantasy-font">Bring Your Own Key</h1>
+          <p className="text-slate-400 mb-6 text-sm leading-relaxed">
+            Infinity Quest runs entirely in your browser and calls Google Gemini directly — so you supply the key.
+            It takes about two minutes:
           </p>
         </div>
+
+        <ol className="text-slate-300 text-sm space-y-2 mb-6 bg-slate-900/60 border border-slate-700 rounded-lg p-4">
+          <li><span className="text-amber-500 font-bold">1.</span> Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:underline">aistudio.google.com/apikey</a> (free, Google account).</li>
+          <li><span className="text-amber-500 font-bold">2.</span> Click <em>Create API key</em> and copy the value.</li>
+          <li><span className="text-amber-500 font-bold">3.</span> Paste it below — it is stored only in this browser.</li>
+        </ol>
 
         <label className="block text-xs font-medium text-slate-300 mb-2 uppercase tracking-wider">
           Gemini API Key

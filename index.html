@@ -4,6 +4,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Infinity Quest — an AI-narrated fantasy RPG where every choice rewrites the world. Bring your own Gemini API key." />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#020617" />
     <title>Infinity Quest</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -89,6 +93,29 @@
       /* Transitions */
       .fade-enter { opacity: 0; }
       .fade-enter-active { opacity: 1; transition: opacity 500ms ease-in; }
+
+      /* Keyboard-visible focus for every interactive element */
+      button:focus-visible,
+      a:focus-visible,
+      input:focus-visible,
+      textarea:focus-visible,
+      select:focus-visible,
+      [tabindex]:focus-visible {
+        outline: 2px solid #f59e0b;
+        outline-offset: 2px;
+        border-radius: 4px;
+      }
+
+      /* Honor the user's OS-level reduced-motion preference */
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+          scroll-behavior: auto !important;
+        }
+        .typewriter::after { animation: none !important; }
+      }
     </style>
   <script type="importmap">
 {
