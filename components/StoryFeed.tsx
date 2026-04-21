@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { GameTurn, Language } from '../types';
+import { GameTurn, Language, TypewriterSpeed } from '../types';
 import { User, Bot, Sparkles, Volume2, Pause, RefreshCw, Skull } from 'lucide-react';
 import TypewriterText from './TypewriterText';
 import { isSafeImageUrl, isSafeKeyword } from '../utils/safety';
@@ -11,9 +11,18 @@ interface StoryFeedProps {
   language: Language;
   onGenerateAudio: (turnId: string, text: string) => void;
   onKeywordAction?: (keyword: string) => void;
+  typewriterSpeed?: TypewriterSpeed;
 }
 
-const StoryFeed: React.FC<StoryFeedProps> = ({ history, isThinking, language, onGenerateAudio, onKeywordAction }) => {
+const SPEED_TO_MS: Record<TypewriterSpeed, number> = {
+  instant: 0,
+  fast: 8,
+  normal: 15,
+  slow: 28,
+};
+
+const StoryFeed: React.FC<StoryFeedProps> = ({ history, isThinking, language, onGenerateAudio, onKeywordAction, typewriterSpeed = 'normal' }) => {
+  const speedMs = SPEED_TO_MS[typewriterSpeed] ?? SPEED_TO_MS.normal;
   const bottomRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -90,9 +99,10 @@ const StoryFeed: React.FC<StoryFeedProps> = ({ history, isThinking, language, on
                     : 'bg-slate-800 border border-slate-700 text-slate-200'
               }`}>
                 {isLatestBotTurn ? (
-                   <TypewriterText 
-                      text={turn.text} 
-                      onComplete={() => bottomRef.current?.scrollIntoView()} 
+                   <TypewriterText
+                      text={turn.text}
+                      speed={speedMs}
+                      onComplete={() => bottomRef.current?.scrollIntoView()}
                       onKeywordClick={onKeywordAction}
                    />
                 ) : (

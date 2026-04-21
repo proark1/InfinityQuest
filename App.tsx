@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Ability,
   AppSettings,
   CharacterStats,
+  CodexEntry,
   ImageSize,
   InventoryItem,
   Language,
@@ -29,6 +30,9 @@ import MinigameDice from './components/MinigameDice';
 import ItemInspector from './components/ItemInspector';
 import CampModal from './components/CampModal';
 import AbilityHotbar from './components/AbilityHotbar';
+import AchievementToast from './components/AchievementToast';
+import CodexEntryModal from './components/CodexEntryModal';
+import ShrineModal from './components/ShrineModal';
 import { effectiveStats, inferSlot } from './utils/equipment';
 import { SoundManager } from './utils/soundEffects';
 import { checkApiKey, generateAudio, isAiStudioAvailable, requestApiKey } from './services/geminiService';
@@ -51,11 +55,33 @@ import { usePersistedGameState } from './hooks/usePersistedGameState';
 import { usePersistedMetaState } from './hooks/usePersistedMetaState';
 import { useFloatingTexts } from './hooks/useFloatingTexts';
 import { useGameTurn } from './hooks/useGameTurn';
+import { useAchievementEngine } from './hooks/useAchievementEngine';
+import { applyArmoryRarityUpgrade, computeSanctuaryBonuses } from './utils/progression';
 
 const INITIAL_PROMPTS: Record<Language, string> = {
   [Language.English]: 'Start the adventure. I have just arrived in the region.',
   [Language.German]: 'Beginne das Abenteuer. Ich bin gerade in der Region angekommen.',
 };
+
+// Display names for the ascension ladder. Must stay in sync with the Realism
+// Charter §5 in services/geminiService.ts so the AI narration matches the UI.
+const ASCENSION_NAMES = [
+  'Baseline',
+  'Tarnished Cycle',
+  'Thorned World',
+  'Bloodmoon',
+  'Umbral Sovereign',
+  'Umbral Sovereign',
+];
+
+const NARRATOR_HINTS = [
+  'Press Space to skip the typewriter.',
+  'Bury an item at a shrine to leave a legacy.',
+  'Your sanctuary grows with every run.',
+  'A nemesis remembers who slew your last hero.',
+  'Pick a chip, or type anything at all.',
+  'Classes unlock by clearing acts and ascending.',
+];
 
 function App() {
   const [apiKeyReady, setApiKeyReady] = useState<boolean>(false);
@@ -71,6 +97,7 @@ function App() {
   const [activeSkillCheck, setActiveSkillCheck] = useState<SkillCheck | null>(null);
   const [activeWorldRoll, setActiveWorldRoll] = useState<WorldRoll | null>(null);
   const [pendingLegacyItem, setPendingLegacyItem] = useState<LegacyItem | null>(null);
+  const [inspectCodexEntry, setInspectCodexEntry] = useState<CodexEntry | null>(null);
 
   const [settings, setSettings] = useState<AppSettings>({
     textModel: TextModel.Pro,
@@ -87,6 +114,8 @@ function App() {
     resetGame,
     persistWarning,
     clearPersistWarning,
+    hasSavedRun,
+    continueSavedRun,
   } = usePersistedGameState();
   const { metaState, setMetaState } = usePersistedMetaState();
   const { floatingTexts, addFloatingText } = useFloatingTexts();
@@ -96,12 +125,91 @@ function App() {
     setGameState,
     settings,
     metaState,
+    setMetaState,
     addFloatingText,
     setActiveSkillCheck,
     setActiveWorldRoll,
     activeSkillCheck,
     activeWorldRoll,
   });
+
+  const { active: activeAchievement, dismiss: dismissAchievement } = useAchievementEngine({
+    gameState,
+    metaState,
+    setGameState,
+    setMetaState,
+  });
+
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Latest narrator turn provides the chip suggestions; max 3, trimmed.
+  const suggestedChips = useMemo<string[]>(() => {
+    const lastModel = [...gameState.history].reverse().find(t => t.role === 'model');
+    if (!lastModel?.choices) return [];
+    return lastModel.choices.filter(c => typeof c === 'string' && c.trim().length > 0).slice(0, 3);
+  }, [gameState.history]);
+
+  // Rotating narrator hint while the turn is in flight — keeps the UI feeling
+  // alive instead of frozen during LLM latency.
+  const [hintIndex, setHintIndex] = useState(0);
+  useEffect(() => {
+    if (!loading) return;
+    setHintIndex(i => (i + 1) % NARRATOR_HINTS.length);
+    const id = window.setInterval(() => {
+      setHintIndex(i => (i + 1) % NARRATOR_HINTS.length);
+    }, 3500);
+    return () => window.clearInterval(id);
+  }, [loading]);
+  const narratorHint = NARRATOR_HINTS[hintIndex];
+
+  // Global keyboard shortcuts. Ignored when typing in an input/textarea so the
+  // action box never eats its own text.
+  useEffect(() => {
+    if (!gameStarted || gameState.isGameOver || gameState.isVictory) return;
+    const isTyping = () => {
+      const el = document.activeElement as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+    };
+    const handler = (e: KeyboardEvent) => {
+      if (loading || activeSkillCheck || activeWorldRoll) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (isTyping()) return;
+      // Number keys fire suggested-action chips.
+      if (['1', '2', '3'].includes(e.key)) {
+        const chip = suggestedChips[Number(e.key) - 1];
+        if (chip) {
+          e.preventDefault();
+          SoundManager.playClick();
+          processTurn(chip);
+        }
+        return;
+      }
+      if (e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        setSidebarOpen(s => !s);
+      } else if (e.key.toLowerCase() === 'p' && metaState.pastHeroes.length > 0) {
+        e.preventDefault();
+        setShowPantheon(true);
+      } else if (e.key === '/') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [
+    gameStarted,
+    gameState.isGameOver,
+    gameState.isVictory,
+    loading,
+    activeSkillCheck,
+    activeWorldRoll,
+    suggestedChips,
+    processTurn,
+    metaState.pastHeroes.length,
+  ]);
 
   useEffect(() => {
     checkApiKey().then(setApiKeyReady);
@@ -331,6 +439,7 @@ function App() {
       <LivingBackground biome={gameState.location?.biome} weather={gameState.location?.weather} />
       <VisualEffectsLayer gameState={gameState} />
       <FloatingTextLayer items={floatingTexts} />
+      <AchievementToast achievement={activeAchievement} onClose={dismissAchievement} />
       {persistWarning && (
         <div
           role="alert"
@@ -366,6 +475,7 @@ function App() {
                }}
                isThinking={loading}
                onInspectItem={setInspectItem}
+               onInspectCodex={setInspectCodexEntry}
                className="w-80 flex-shrink-0 relative z-10"
              />
            </div>
@@ -380,6 +490,14 @@ function App() {
                       <Menu />
                     </button>
                     <span className="font-bold text-amber-500 fantasy-font tracking-widest hidden sm:block">INFINITY QUEST</span>
+                    {(gameState.ascensionLevel ?? 0) > 0 && (
+                      <span
+                        className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 bg-purple-950/40 border border-purple-500/40 rounded-full text-[10px] font-black tracking-widest text-purple-300 uppercase"
+                        title={ASCENSION_NAMES[Math.min(gameState.ascensionLevel, ASCENSION_NAMES.length - 1)]}
+                      >
+                        <span aria-hidden="true">▲</span> Asc {gameState.ascensionLevel} — {ASCENSION_NAMES[Math.min(gameState.ascensionLevel, ASCENSION_NAMES.length - 1)]}
+                      </span>
+                    )}
                  </div>
                  <div className="flex items-center gap-3">
                     <button
@@ -404,7 +522,20 @@ function App() {
                  isThinking={loading}
                  language={settings.language}
                  onGenerateAudio={handleGenerateAudio}
-                 onKeywordAction={(kw) => processTurn(`Inspect [[${kw}]]`)}
+                 onKeywordAction={(kw) => {
+                   // Match codex entry first (case-insensitive) — opens detail
+                   // modal instead of burning a turn on inspection.
+                   const match = gameState.codex.find(e =>
+                     e.name.toLowerCase() === kw.toLowerCase() ||
+                     kw.toLowerCase().includes(e.name.toLowerCase()),
+                   );
+                   if (match) {
+                     setInspectCodexEntry(match);
+                   } else {
+                     processTurn(`Inspect [[${kw}]]`);
+                   }
+                 }}
+                 typewriterSpeed={metaState.typewriterSpeed}
               />
 
               <ActionOverlay
@@ -423,32 +554,58 @@ function App() {
                  disabled={loading || !!activeSkillCheck || !!activeWorldRoll}
               />
 
-              <div className="bg-slate-900 border-t border-slate-800 p-4 z-10">
-                 <div className="max-w-3xl mx-auto flex gap-2">
-                    <input
-                      type="text"
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          processTurn(input);
-                          setInput('');
-                        }
-                      }}
-                      disabled={loading}
-                      aria-busy={loading}
-                      aria-label="Describe your action"
-                      className="flex-1 bg-slate-950 border border-slate-700 text-white rounded-xl py-4 px-5 focus:outline-none focus:border-amber-500 shadow-inner"
-                      placeholder="What will you do?"
-                    />
-                    <button
-                      onClick={() => { processTurn(input); setInput(''); }}
-                      disabled={loading || !input.trim()}
-                      className="p-4 bg-amber-600 hover:bg-amber-500 text-white rounded-xl disabled:opacity-50 transition-all hover:scale-105 active:scale-95"
-                      aria-label="Submit action"
-                    >
-                      <Send size={24} />
-                    </button>
+              <div className="bg-slate-900 border-t border-slate-800 p-3 sm:p-4 z-10">
+                 <div className="max-w-3xl mx-auto space-y-2">
+                    {suggestedChips.length > 0 && !loading && !activeSkillCheck && !activeWorldRoll && (
+                      <div className="flex flex-wrap gap-2" role="group" aria-label="Suggested actions">
+                        {suggestedChips.map((chip, i) => (
+                          <button
+                            key={`${chip}-${i}`}
+                            onClick={() => {
+                              SoundManager.playClick();
+                              processTurn(chip);
+                            }}
+                            className="px-3 py-2 bg-slate-800 hover:bg-amber-600 hover:text-white text-slate-200 text-xs sm:text-sm rounded-full border border-slate-700 hover:border-amber-500 transition-all min-h-[36px] flex items-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-400"
+                            aria-label={`Suggested action ${i + 1}: ${chip}`}
+                          >
+                            <span className="text-[9px] font-black text-amber-500 opacity-60">{i + 1}</span>
+                            <span className="truncate max-w-[240px]">{chip}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <input
+                        ref={inputRef}
+                        type="text"
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            processTurn(input);
+                            setInput('');
+                          }
+                        }}
+                        disabled={loading}
+                        aria-busy={loading}
+                        aria-label="Describe your action"
+                        className="flex-1 bg-slate-950 border border-slate-700 text-white rounded-xl py-3 sm:py-4 px-4 sm:px-5 focus:outline-none focus:border-amber-500 shadow-inner min-h-[48px]"
+                        placeholder={loading ? 'The narrator is weaving…' : 'What will you do?'}
+                      />
+                      <button
+                        onClick={() => { processTurn(input); setInput(''); }}
+                        disabled={loading || !input.trim()}
+                        className="p-3 sm:p-4 bg-amber-600 hover:bg-amber-500 text-white rounded-xl disabled:opacity-50 transition-all hover:scale-105 active:scale-95 min-h-[48px] min-w-[48px] flex items-center justify-center"
+                        aria-label="Submit action"
+                      >
+                        <Send size={22} />
+                      </button>
+                    </div>
+                    {loading && (
+                      <div className="text-[11px] text-slate-500 italic text-center animate-pulse">
+                        {narratorHint}
+                      </div>
+                    )}
                  </div>
               </div>
            </div>
@@ -511,18 +668,65 @@ function App() {
       )}
 
       {!gameStarted && !showClassSelection && !showPantheon && (
-         <div className="flex-1 flex flex-col items-center justify-center space-y-12 p-8 bg-[url('https://images.unsplash.com/photo-1519074069444-1ba4fff66d16?q=80&w=2544')] bg-cover bg-center relative">
+         <div className="flex-1 flex flex-col items-center justify-center space-y-10 p-6 sm:p-8 bg-[url('https://images.unsplash.com/photo-1519074069444-1ba4fff66d16?q=80&w=2544')] bg-cover bg-center relative overflow-y-auto">
             <div className="absolute inset-0 bg-black/70" />
-            <div className="relative z-10 text-center space-y-8 animate-in zoom-in duration-700">
-               <h1 className="text-8xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-yellow-200 to-amber-600 fantasy-font drop-shadow-2xl tracking-tighter">INFINITY QUEST</h1>
-               <div className="flex flex-col gap-4 items-center">
-                 <div className="p-1 bg-gradient-to-r from-amber-500 to-amber-800 rounded-2xl">
-                   <button onClick={() => { SoundManager.playConfirm(); setShowClassSelection(true); }} className="px-16 py-8 bg-slate-900 hover:bg-slate-800 text-white text-3xl font-black rounded-xl shadow-2xl transition-all hover:scale-105 active:scale-95 fantasy-font tracking-widest border border-amber-500/30 font-bold uppercase">BEGIN ADVENTURE</button>
+            <div className="relative z-10 text-center space-y-8 animate-in zoom-in duration-700 w-full max-w-2xl">
+               <h1 className="text-6xl sm:text-7xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-yellow-200 to-amber-600 fantasy-font drop-shadow-2xl tracking-tighter">INFINITY QUEST</h1>
+
+               {hasSavedRun ? (
+                 <div className="space-y-3">
+                   <div className="bg-slate-900/70 backdrop-blur border border-amber-500/30 rounded-2xl p-4 text-left">
+                     <div className="text-[10px] font-black text-amber-400 uppercase tracking-[0.3em] mb-2">Last Chapter</div>
+                     <div className="text-slate-200 text-sm italic line-clamp-3">
+                       "{gameState.history.slice().reverse().find(t => t.role === 'model')?.text?.replace(/\[\[|\]\]/g, '').slice(0, 220) || 'Your story awaits.'}"
+                     </div>
+                     {gameState.location?.name && (
+                       <div className="text-xs text-slate-400 mt-2">
+                         {gameState.title || 'Hero'} · Lvl {gameState.level} · {gameState.location.name}
+                       </div>
+                     )}
+                   </div>
+                   <div className="flex flex-col gap-3 items-stretch">
+                     <button
+                       onClick={() => { SoundManager.playConfirm(); continueSavedRun(); }}
+                       className="py-5 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white text-xl sm:text-2xl font-black rounded-xl shadow-2xl transition-all hover:scale-[1.02] active:scale-95 fantasy-font tracking-widest uppercase"
+                     >
+                       Continue Your Story
+                     </button>
+                     <div className="flex flex-col sm:flex-row gap-2">
+                       <button
+                         onClick={() => {
+                           if (window.confirm('Start a new run? Your current story will be overwritten.')) {
+                             SoundManager.playConfirm();
+                             resetGame();
+                             setShowClassSelection(true);
+                           }
+                         }}
+                         className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl transition-all fantasy-font uppercase tracking-widest text-sm border border-slate-700"
+                       >
+                         New Adventure
+                       </button>
+                       {metaState.pastHeroes.length > 0 && (
+                         <button
+                           onClick={() => { SoundManager.playConfirm(); setShowPantheon(true); }}
+                           className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-amber-400 font-bold rounded-xl transition-all fantasy-font uppercase tracking-widest text-sm border border-amber-500/20"
+                         >
+                           Pantheon
+                         </button>
+                       )}
+                     </div>
+                   </div>
                  </div>
-                 {metaState.pastHeroes.length > 0 && (
-                   <button onClick={() => { SoundManager.playConfirm(); setShowPantheon(true); }} className="px-8 py-4 bg-slate-800 hover:bg-slate-700 text-amber-500 text-xl font-bold rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95 fantasy-font tracking-widest border border-amber-500/20 uppercase">ENTER PANTHEON</button>
-                 )}
-               </div>
+               ) : (
+                 <div className="flex flex-col gap-4 items-center">
+                   <div className="p-1 bg-gradient-to-r from-amber-500 to-amber-800 rounded-2xl">
+                     <button onClick={() => { SoundManager.playConfirm(); setShowClassSelection(true); }} className="px-10 sm:px-16 py-6 sm:py-8 bg-slate-900 hover:bg-slate-800 text-white text-2xl sm:text-3xl font-black rounded-xl shadow-2xl transition-all hover:scale-105 active:scale-95 fantasy-font tracking-widest border border-amber-500/30 font-bold uppercase">BEGIN ADVENTURE</button>
+                   </div>
+                   {metaState.pastHeroes.length > 0 && (
+                     <button onClick={() => { SoundManager.playConfirm(); setShowPantheon(true); }} className="px-8 py-4 bg-slate-800 hover:bg-slate-700 text-amber-500 text-xl font-bold rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95 fantasy-font tracking-widest border border-amber-500/20 uppercase">ENTER PANTHEON</button>
+                   )}
+                 </div>
+               )}
             </div>
          </div>
       )}
@@ -563,8 +767,11 @@ function App() {
       {showClassSelection && (
          <ClassSelection
             language={settings.language}
+            metaState={metaState}
             onSelect={(cls, stats, items, imageUrl) => {
-               const finalInventory = [...items];
+               const bonuses = computeSanctuaryBonuses(metaState.sanctuary);
+               const upgradedStarters = applyArmoryRarityUpgrade(items, bonuses.rarityUpgrade);
+               const finalInventory = [...upgradedStarters, ...bonuses.extraItems];
                const finalStats: CharacterStats = { ...stats };
 
                if (pendingLegacyItem) {
@@ -587,15 +794,33 @@ function App() {
                  setPendingLegacyItem(null);
                }
 
+               const startingHp = INITIAL_HP + bonuses.bonusHp;
+
+               // Snapshot meta for the end-of-run reveal so we can diff what
+               // the player earned during this run.
+               setMetaState(prev => ({
+                 ...prev,
+                 runSnapshot: {
+                   achievementsAtStart: [...(prev.unlockedAchievements ?? [])],
+                   classesAtStart: [...(prev.unlockedClasses ?? [])],
+                   codexIdsAtStart: [],
+                   soulShardsAtStart: prev.soulShards,
+                   nemesisAtStart: prev.activeNemesis?.name,
+                 },
+               }));
+
                setGameState(prev => ({
                  ...prev,
                  playerClass: cls,
                  stats: finalStats,
                  inventory: finalInventory,
-                 currentHp: INITIAL_HP,
-                 maxHp: INITIAL_HP,
+                 gold: (prev.gold || 0) + bonuses.bonusGold,
+                 currentHp: startingHp,
+                 maxHp: startingHp,
                  title: 'The ' + cls,
                  portraitUrl: imageUrl,
+                 activeNemesis: metaState.activeNemesis,
+                 ascensionLevel: metaState.ascensionLevel ?? 0,
                }));
                setGameStarted(true);
                setShowClassSelection(false);
@@ -644,15 +869,57 @@ function App() {
         inventory={gameState.inventory}
         onConfirm={handleCamp}
       />
-      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} settings={settings} onSettingsChange={setSettings} onNewGame={() => { setSettingsOpen(false); resetGame(); }} />
+      <CodexEntryModal entry={inspectCodexEntry} onClose={() => setInspectCodexEntry(null)} />
+      <ShrineModal
+        isOpen={!!gameState.foundShrine}
+        inventory={gameState.inventory}
+        heroName={gameState.title}
+        onBury={(item, note) => {
+          setMetaState(prev => ({
+            ...prev,
+            legacyItems: [
+              ...(prev.legacyItems ?? []),
+              {
+                ...item,
+                buriedBy: gameState.title || 'A Forgotten Hero',
+                buriedAt: Date.now(),
+                note,
+              },
+            ],
+          }));
+          setGameState(prev => ({
+            ...prev,
+            inventory: prev.inventory.filter(i => i.name !== item.name),
+            foundShrine: false,
+          }));
+          addFloatingText('Heirloom buried', 'xp');
+          SoundManager.playConfirm();
+          processTurn(`I bury the ${item.name} at the shrine and leave. Note: "${note}"`);
+        }}
+        onSkip={() => {
+          setGameState(prev => ({ ...prev, foundShrine: false }));
+          processTurn('I leave the shrine without burying anything.');
+        }}
+      />
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={settings}
+        onSettingsChange={setSettings}
+        onNewGame={() => { setSettingsOpen(false); resetGame(); }}
+        typewriterSpeed={metaState.typewriterSpeed ?? 'normal'}
+        onTypewriterSpeedChange={(speed) => setMetaState(prev => ({ ...prev, typewriterSpeed: speed }))}
+      />
       <GameOverModal
         isOpen={gameState.isGameOver}
         gameState={gameState}
+        metaState={metaState}
         onContinue={(shardsEarned) => handleRunEnd(shardsEarned, gameState.gameOverCause || 'Unknown')}
       />
       <VictoryModal
         isOpen={gameState.isVictory}
         gameState={gameState}
+        metaState={metaState}
         onAscend={(shardsEarned) => handleRunEnd(shardsEarned, 'Ascended')}
       />
     </div>

@@ -1,4 +1,4 @@
-import { CharacterStats, GameState, MetaState, Reputation, SanctuaryState } from '../types';
+import { CharacterClass, CharacterStats, GameState, MetaState, Reputation, SanctuaryState } from '../types';
 
 export const STORAGE_KEY = 'infinity_quest_save_v4';
 export const META_STORAGE_KEY = 'infinity_quest_meta_v1';
@@ -95,6 +95,8 @@ export const INITIAL_GAME_STATE: GameState = {
   maps: {},
 };
 
+export const DEFAULT_UNLOCKED_CLASSES: CharacterClass[] = ['Warrior', 'Rogue'];
+
 export const INITIAL_META_STATE: MetaState = {
   soulShards: 0,
   pastHeroes: [],
@@ -102,6 +104,10 @@ export const INITIAL_META_STATE: MetaState = {
   sanctuary: DEFAULT_SANCTUARY,
   legacyItems: [],
   ascensionLevel: 0,
+  unlockedAchievements: [],
+  unlockedClasses: DEFAULT_UNLOCKED_CLASSES,
+  typewriterSpeed: 'normal',
+  nemesesDefeated: 0,
 };
 
 export const REPUTATION_STATUS = (value: number): Reputation['status'] => {

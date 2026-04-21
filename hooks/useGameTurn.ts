@@ -35,6 +35,7 @@ interface UseGameTurnArgs {
   setGameState: React.Dispatch<React.SetStateAction<GameState>>;
   settings: AppSettings;
   metaState: MetaState;
+  setMetaState: React.Dispatch<React.SetStateAction<MetaState>>;
   addFloatingText: (text: string, type: FloatingText['type']) => void;
   setActiveSkillCheck: React.Dispatch<React.SetStateAction<SkillCheck | null>>;
   setActiveWorldRoll: React.Dispatch<React.SetStateAction<WorldRoll | null>>;
@@ -52,6 +53,7 @@ export function useGameTurn({
   setGameState,
   settings,
   metaState,
+  setMetaState,
   addFloatingText,
   setActiveSkillCheck,
   setActiveWorldRoll,
@@ -129,7 +131,7 @@ export function useGameTurn({
           currentSettings,
           current.activeBlessings,
           current.reputation,
-          undefined,
+          current.activeNemesis,
           currentMeta.sanctuary,
           current.currentAct,
           current.actProgress,
@@ -251,6 +253,7 @@ export function useGameTurn({
             currentHp: newHp,
             hunger: newHunger,
             thirst: newThirst,
+            foundShrine: aiResponse.foundShrine === true ? true : prev.foundShrine,
             adrenaline: Math.min(
               ADRENALINE_MAX,
               (prev.adrenaline || 0) + (prev.activeEnemy ? 20 : 10),
@@ -279,6 +282,24 @@ export function useGameTurn({
           if (starvationDamage > 0) {
             addFloatingText(`-${starvationDamage} HP (${newHunger === 0 && newThirst === 0 ? 'starving/parched' : newHunger === 0 ? 'starving' : 'parched'})`, 'damage');
             SoundManager.playDamage();
+          }
+
+          // Nemesis born — on the moment the player dies to a named foe (not
+          // starvation/dehydration/unknown), stamp that foe into meta so they
+          // haunt the next run.
+          const justDied = !prev.isGameOver && newHp === 0;
+          const cause = nextState.gameOverCause;
+          const GENERIC_CAUSES = ['Starvation', 'Dehydration', 'Starvation and dehydration', 'Unknown'];
+          if (justDied && cause && !GENERIC_CAUSES.includes(cause)) {
+            const originLocation = prev.location?.name || 'an unmarked place';
+            setMetaState(m => ({
+              ...m,
+              activeNemesis: {
+                name: cause,
+                origin: `Slayer of ${prev.title || 'the hero'} in ${originLocation}`,
+                defeatedAt: 0,
+              },
+            }));
           }
 
           // Recompute maxMana off (possibly updated) INT; regenerate a chunk each turn.
@@ -340,6 +361,29 @@ export function useGameTurn({
             SoundManager.playEnemyDefeat();
             nextState.activeEnemy = undefined;
             addFloatingText('VANQUISHED!', 'info');
+          }
+
+          // Nemesis resolution — the narrator signals the killer of a past hero
+          // has been slain. Clear the pursuit, bank a lifetime tally, and award
+          // the Avenger achievement.
+          const nemesisHit =
+            aiResponse.nemesisDefeated === true ||
+            (aiResponse.combat?.enemyDefeated === true &&
+              prev.activeNemesis &&
+              prev.activeEnemy?.name &&
+              prev.activeEnemy.name.toLowerCase().includes(prev.activeNemesis.name.toLowerCase()));
+          if (nemesisHit && prev.activeNemesis) {
+            nextState.activeNemesis = undefined;
+            addFloatingText('Nemesis Avenged!', 'xp');
+            SoundManager.playEnemyDefeat();
+            setMetaState(m => ({
+              ...m,
+              activeNemesis: undefined,
+              nemesesDefeated: (m.nemesesDefeated ?? 0) + 1,
+              unlockedAchievements: Array.from(new Set([...(m.unlockedAchievements ?? []), 'avenger'])),
+              soulShards: (m.soulShards ?? 0) + 150,
+            }));
+            nextState.unlockedAchievements = Array.from(new Set([...prev.unlockedAchievements, 'avenger']));
           }
 
           if (aiResponse.hpChange && aiResponse.hpChange < 0) {

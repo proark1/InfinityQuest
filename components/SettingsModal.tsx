@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { AppSettings, ImageSize, TextModel, Language } from '../types';
-import { X, Settings, Globe, RefreshCcw, KeyRound } from 'lucide-react';
+import { AppSettings, ImageSize, TextModel, Language, TypewriterSpeed } from '../types';
+import { X, Settings, Globe, RefreshCcw, KeyRound, Type } from 'lucide-react';
 import { clearApiKey, getApiKey, isStoredInLocalStorage, maskKey, setApiKey } from '../utils/apiKey';
 import { useModal } from '../hooks/useModal';
 
@@ -10,9 +10,18 @@ interface SettingsModalProps {
   settings: AppSettings;
   onSettingsChange: (newSettings: AppSettings) => void;
   onNewGame: () => void;
+  typewriterSpeed: TypewriterSpeed;
+  onTypewriterSpeedChange: (speed: TypewriterSpeed) => void;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings, onSettingsChange, onNewGame }) => {
+const SPEED_OPTIONS: { value: TypewriterSpeed; label: string; desc: string }[] = [
+  { value: 'instant', label: 'Instant', desc: 'No animation' },
+  { value: 'fast', label: 'Fast', desc: '8ms / chunk' },
+  { value: 'normal', label: 'Normal', desc: '15ms / chunk' },
+  { value: 'slow', label: 'Slow', desc: '28ms / chunk' },
+];
+
+const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings, onSettingsChange, onNewGame, typewriterSpeed, onTypewriterSpeedChange }) => {
   const [editingKey, setEditingKey] = useState(false);
   const [draftKey, setDraftKey] = useState('');
   const [showKey, setShowKey] = useState(false);
@@ -196,6 +205,32 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
               <option value={ImageSize.Size_2K}>2K (High Res)</option>
               <option value={ImageSize.Size_4K}>4K (Ultra Res)</option>
             </select>
+          </div>
+
+          {/* Typewriter Speed */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-300 flex items-center gap-2">
+              <Type size={16} />
+              Typewriter Speed
+            </label>
+            <div className="grid grid-cols-4 gap-2">
+              {SPEED_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => onTypewriterSpeedChange(opt.value)}
+                  className={`p-2 rounded-lg border text-center transition-all ${
+                    typewriterSpeed === opt.value
+                      ? 'border-amber-500 bg-amber-500/10 text-white'
+                      : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600'
+                  }`}
+                  aria-pressed={typewriterSpeed === opt.value}
+                >
+                  <div className="text-sm font-bold">{opt.label}</div>
+                  <div className="text-[10px] opacity-70">{opt.desc}</div>
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-500">Tip: press Space while the narrator types to skip to the end.</p>
           </div>
 
           {/* Auto Image Toggle */}

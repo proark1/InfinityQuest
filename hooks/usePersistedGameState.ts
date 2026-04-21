@@ -19,6 +19,10 @@ interface UsePersistedGameState {
   resetGame: () => void;
   persistWarning: PersistWarning | null;
   clearPersistWarning: () => void;
+  /** A previously-saved run is loaded in memory but not yet started. */
+  hasSavedRun: boolean;
+  /** Resume the loaded save — flips the game into the active view. */
+  continueSavedRun: () => void;
 }
 
 interface PersistedEnvelope {
@@ -52,6 +56,7 @@ const safeWrite = (value: string): PersistWarning | null => {
 export function usePersistedGameState(): UsePersistedGameState {
   const [gameState, setGameState] = useState<GameState>(INITIAL_GAME_STATE);
   const [gameStarted, setGameStarted] = useState<boolean>(false);
+  const [hasSavedRun, setHasSavedRun] = useState<boolean>(false);
   const [persistWarning, setPersistWarning] = useState<PersistWarning | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLoadedRef = useRef(false);
@@ -81,7 +86,9 @@ export function usePersistedGameState(): UsePersistedGameState {
         const loaded = envelope ?? legacyState;
         if (loaded && Array.isArray(loaded.history) && loaded.history.length > 0) {
           setGameState({ ...INITIAL_GAME_STATE, ...loaded });
-          setGameStarted(true);
+          // Present the saved run as a "Continue your story" CTA on the title
+          // screen; the player opts back in instead of being dropped mid-scene.
+          setHasSavedRun(true);
         } else if (!loaded) {
           throw new Error('unrecognized-save-shape');
         }
@@ -134,7 +141,13 @@ export function usePersistedGameState(): UsePersistedGameState {
     }
     setGameState(INITIAL_GAME_STATE);
     setGameStarted(false);
+    setHasSavedRun(false);
     setPersistWarning(null);
+  }, []);
+
+  const continueSavedRun = useCallback(() => {
+    setGameStarted(true);
+    setHasSavedRun(false);
   }, []);
 
   const clearPersistWarning = useCallback(() => setPersistWarning(null), []);
@@ -147,5 +160,7 @@ export function usePersistedGameState(): UsePersistedGameState {
     resetGame,
     persistWarning,
     clearPersistWarning,
+    hasSavedRun,
+    continueSavedRun,
   };
 }

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { GameState, Language, ItemRarity, InventoryItem } from '../types';
-import { Backpack, BicepsFlexed, Brain, Activity, Trophy, Zap, Sword, Book, MapPin, Skull, Heart, Hammer, Sparkles, Utensils, Droplets, Flame, Coins, Medal, Flag, User, Eye, Shield, Gem } from 'lucide-react';
+import { CodexEntry, GameState, Language, ItemRarity, InventoryItem } from '../types';
+import { Backpack, BicepsFlexed, Brain, Activity, Trophy, Zap, Sword, Book, MapPin, Skull, Heart, Hammer, Sparkles, Utensils, Droplets, Flame, Coins, Medal, Flag, User, Eye, Shield, Gem, ChevronRight, Swords } from 'lucide-react';
 import { SoundManager } from '../utils/soundEffects';
 import { isSafeImageUrl } from '../utils/safety';
 
@@ -12,9 +12,10 @@ interface SidebarProps {
   onCraft?: (item1: InventoryItem, item2: InventoryItem) => void;
   isThinking?: boolean;
   onInspectItem: (item: InventoryItem) => void;
+  onInspectCodex?: (entry: CodexEntry) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ gameState, className = '', language, onCraft, isThinking, onInspectItem }) => {
+const Sidebar: React.FC<SidebarProps> = ({ gameState, className = '', language, onCraft, isThinking, onInspectItem, onInspectCodex }) => {
   const [activeTab, setActiveTab] = useState<'status' | 'inventory' | 'abilities' | 'codex' | 'social'>('status');
   const [isSaving, setIsSaving] = useState(false);
   const [isCraftingMode, setIsCraftingMode] = useState(false);
@@ -332,6 +333,14 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, className = '', language, 
                 <div className="flex items-center gap-2 text-purple-500 uppercase text-[10px] font-black tracking-widest">
                   <Book size={16} /> Codex
                 </div>
+                <div className="flex gap-2">
+                   <span className="flex items-center gap-1 text-[9px] font-black text-blue-400 uppercase tracking-wider">
+                     <MapPin size={10}/> Atlas {gameState.codex.filter(e => e.category === 'Atlas').length}
+                   </span>
+                   <span className="flex items-center gap-1 text-[9px] font-black text-red-400 uppercase tracking-wider">
+                     <Swords size={10}/> Bestiary {gameState.codex.filter(e => e.category === 'Bestiary').length}
+                   </span>
+                </div>
               </div>
 
              {(!gameState.codex || gameState.codex.length === 0) ? (
@@ -339,12 +348,28 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, className = '', language, 
               ) : (
                 <ul className="space-y-2">
                   {gameState.codex.map((entry) => (
-                    <li key={entry.id ?? entry.name} className="border border-slate-700 bg-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
+                    <li
+                      key={entry.id ?? entry.name}
+                      className="border border-slate-700 bg-slate-800/50 hover:bg-slate-800 rounded-xl p-3 flex flex-col gap-1 cursor-pointer transition-all hover:translate-x-1 focus-within:ring-1 focus-within:ring-amber-500"
+                      onClick={() => onInspectCodex?.(entry)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onInspectCodex?.(entry);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Open ${entry.name} codex entry`}
+                    >
                       <div className="flex justify-between items-center">
                         <div className="font-black text-white text-[11px] leading-tight">{entry.name}</div>
-                        <div className="text-[7px] font-black uppercase tracking-tighter text-purple-400">{entry.category}</div>
+                        <div className="flex items-center gap-1.5">
+                          <div className="text-[7px] font-black uppercase tracking-tighter text-purple-400">{entry.category}</div>
+                          <ChevronRight size={12} className="text-slate-500" aria-hidden="true" />
+                        </div>
                       </div>
-                      <div className="text-[9px] text-slate-400 leading-relaxed">{entry.description}</div>
+                      <div className="text-[9px] text-slate-400 leading-relaxed line-clamp-2">{entry.description}</div>
                     </li>
                   ))}
                 </ul>
