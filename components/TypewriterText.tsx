@@ -31,8 +31,9 @@ const TypewriterText: React.FC<TypewriterTextProps> = ({ text, speed = 15, onCom
     indexRef.current = 0;
     skipRef.current = false;
 
-    // Honor OS reduced-motion preference: show full text immediately.
-    if (prefersReducedMotion()) {
+    // Honor OS reduced-motion preference or `instant` user setting: show full
+    // text immediately, no animation.
+    if (prefersReducedMotion() || speed <= 0) {
       setDisplayedText(text);
       setIsComplete(true);
       onCompleteRef.current?.();

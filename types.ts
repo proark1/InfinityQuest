@@ -102,7 +102,14 @@ export interface CharacterStats {
   charisma: number;
 }
 
-export type CharacterClass = 'Warrior' | 'Mage' | 'Rogue' | 'Cleric' | 'Traveler';
+export type CharacterClass =
+  | 'Warrior'
+  | 'Mage'
+  | 'Rogue'
+  | 'Cleric'
+  | 'Paladin'
+  | 'Dreadblade'
+  | 'Traveler';
 
 export type CodexCategory = 'Bestiary' | 'Atlas';
 
@@ -190,6 +197,19 @@ export interface LegacyItem extends InventoryItem {
   note: string;
 }
 
+export type TypewriterSpeed = 'instant' | 'fast' | 'normal' | 'slow';
+
+export interface RunSnapshot {
+  // Snapshot of meta state taken when a run *started*. Compared at run end to
+  // show what the player unlocked during the run (codex, achievements, classes,
+  // nemesis). Kept optional for backwards compatibility with old saves.
+  achievementsAtStart: string[];
+  classesAtStart: string[];
+  codexIdsAtStart: string[];
+  soulShardsAtStart: number;
+  nemesisAtStart?: string;
+}
+
 export interface MetaState {
   soulShards: number;
   pastHeroes: PastHero[];
@@ -198,6 +218,11 @@ export interface MetaState {
   sanctuary: SanctuaryState;
   legacyItems: LegacyItem[];
   ascensionLevel: number; // 0 = Base, 1+ = NG+
+  unlockedAchievements: string[]; // IDs persisted across runs
+  unlockedClasses: CharacterClass[]; // Classes available on next run
+  typewriterSpeed: TypewriterSpeed; // UI preference, persists across runs
+  nemesesDefeated: number; // Lifetime count; grants the Avenger badge
+  runSnapshot?: RunSnapshot; // Refreshed when a run starts, read at run end
 }
 
 export interface GameState {
@@ -337,6 +362,9 @@ export interface AIResponse {
 
   // Legacy System
   foundShrine?: boolean; // AI signals that the player is at a shrine
+
+  // True if the narrator confirms the active nemesis was slain this turn.
+  nemesisDefeated?: boolean;
 }
 
 export enum ImageSize {
@@ -391,6 +419,7 @@ export const ACHIEVEMENTS_LIST: Achievement[] = [
   { id: 'beast_master', title: 'Beast Master', description: 'Gain a Companion.', icon: 'paw-print' },
   { id: 'faction_friend', title: 'Ally', description: 'Reach "Friendly" status with any faction.', icon: 'flag' },
   { id: 'ascended', title: 'Ascended', description: 'Complete Act 3 and Ascend.', icon: 'zap' },
+  { id: 'avenger', title: 'Avenger', description: 'Slay a nemesis that once killed you.', icon: 'skull' },
 ];
 
 export const SPELLBOOK_DATA: Spell[] = [

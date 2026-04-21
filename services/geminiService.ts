@@ -138,9 +138,16 @@ ${USER_INPUT_CONTRACT}
    - Honor active nemesis — they pursue, leave signs, reappear.
    - Never contradict what you previously narrated.
 
-5) DIFFICULTY CURVE.
+5) DIFFICULTY CURVE & ASCENSION.
    - Encounter power scales with level + act + ascension. No wolves at level 15. No dragons at level 2 without narrative setup.
    - Boss fights get isBossFight: true and stand between acts.
+   - ASCENSION SCALING (metaState.ascensionLevel on the character line):
+       • Ascension 0 → baseline world.
+       • Ascension 1 ("Tarnished Cycle") → enemies +20% HP, safe rests are rarer, weather turns harsh.
+       • Ascension 2 ("Thorned World") → named mini-bosses appear in Act 1, merchant prices +25%.
+       • Ascension 3 ("Bloodmoon") → surprise encounters after camp, curses on legendary loot.
+       • Ascension 4+ ("Umbral Sovereign") → reality fractures: unnatural biomes, sentient weapons, cosmic horror tone.
+     Name the current cycle in the opening narration once per run.
 
 6) COMBAT LOCK (when an enemy is active).
    - EVERY combat action (Attack, Defend, Spell, Flee) MUST return a skillCheck.
@@ -184,6 +191,23 @@ ${USER_INPUT_CONTRACT}
     - Wrap interactable entities in [[double brackets]]: enemies, notable NPCs, objects of interest.
     - Always fill visualPrompt (one evocative sentence, cinematic).
     - Fill portraitPrompt only when the player's appearance meaningfully changes.
+
+14) NEMESIS CONTINUITY (when the character line shows a Nemesis).
+    - The nemesis killed a previous incarnation. They are PERSONAL, not just another monster.
+    - On the OPENING turn of the run, reference them directly in the narration (a whisper, a rumor, a blood-trail, a remembered face). Do not spawn combat on turn 1.
+    - At least once per act, weave in a sign of their pursuit (a slaughtered scout bearing their mark, a witness who saw them).
+    - When the player finally fights and defeats the nemesis, set combat.enemyDefeated: true AND nemesisDefeated: true. The client grants an Avenger badge and Soul Shards.
+    - Never resurrect the nemesis mid-run.
+
+15) SUGGESTED ACTIONS (via the "choices" field — it powers the UI chips).
+    - Every non-combat-lock turn, return exactly 3 concise "choices" (2–6 words each) representing sensible next moves for a new player.
+    - Make them varied: one safe, one bold, one social/creative. Do NOT mirror the player's last message.
+    - Leave "choices" empty during dice/skill checks or when combat forces a fixed action set.
+
+16) SHRINES OF LEGACY.
+    - When the location, act, or event feels fitting (a quiet ruin, a memorial grove, an abandoned crypt), set foundShrine: true.
+    - Narrate the shrine's mood — the client will offer the player the chance to bury one item as a legacy for the next hero.
+    - Only one shrine per act at most.
 `;
 };
 
@@ -509,7 +533,9 @@ export const generateStoryTurn = async (
                   result: { type: Type.NUMBER }
                },
                required: ["label"]
-            }
+            },
+            nemesisDefeated: { type: Type.BOOLEAN },
+            foundShrine: { type: Type.BOOLEAN }
           },
           required: ["narrative", "inventory", "currentQuest", "visualPrompt", "choices", "stats", "level", "currentXp", "nextLevelXp"]
         }
