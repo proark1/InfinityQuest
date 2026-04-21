@@ -5,6 +5,8 @@ import { generateItemDetails } from '../services/geminiService';
 import { X, Sparkles, Package, Loader, BookOpen, Wand2, Zap, Flame, Snowflake, Utensils, Swords } from 'lucide-react';
 import { SoundManager } from '../utils/soundEffects';
 import { inferSlot, isEquipped } from '../utils/equipment';
+import { isSafeImageUrl } from '../utils/safety';
+import { useModal } from '../hooks/useModal';
 
 interface ItemInspectorProps {
   item: InventoryItem | null;
@@ -19,6 +21,7 @@ interface ItemInspectorProps {
 const ItemInspector: React.FC<ItemInspectorProps> = ({ item, onClose, onConsume, onDetailsLoaded, onEquip, onUnequip, equipped }) => {
   const [details, setDetails] = useState<{ lore: string; imageUrl: string | null } | null>(null);
   const [loading, setLoading] = useState(false);
+  const dialogRef = useModal<HTMLDivElement>(!!item, onClose);
 
   // Identify if this is the special Mage spellbook
   const isSpellbook = item?.type === "Spellbook";
@@ -109,9 +112,11 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({ item, onClose, onConsume,
   );
 
   return (
-    <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={onClose}>
-       <div 
-         className={`relative w-full max-w-xl bg-slate-950 border-2 rounded-[3rem] p-10 shadow-2xl overflow-hidden ${getRarityColor(item.rarity)}`}
+    <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={onClose} role="dialog" aria-modal="true" aria-label={`Inspect ${item.name}`}>
+       <div
+         ref={dialogRef}
+         tabIndex={-1}
+         className={`relative w-full max-w-xl bg-slate-950 border-2 rounded-[3rem] p-10 shadow-2xl overflow-hidden outline-none ${getRarityColor(item.rarity)}`}
          onClick={(e) => e.stopPropagation()}
        >
           <button 
@@ -136,8 +141,8 @@ const ItemInspector: React.FC<ItemInspectorProps> = ({ item, onClose, onConsume,
                           <Loader className="animate-spin" size={32} />
                           <span className="text-[10px] font-black uppercase tracking-widest">Identifying Artifact...</span>
                        </div>
-                    ) : details?.imageUrl ? (
-                       <img src={details.imageUrl} alt={item.name} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" />
+                    ) : isSafeImageUrl(details?.imageUrl) ? (
+                       <img src={details!.imageUrl!} alt={item.name} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" />
                     ) : (
                        <Package size={64} className="opacity-10" />
                     )}

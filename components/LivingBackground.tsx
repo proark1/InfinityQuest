@@ -1,6 +1,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { WeatherType } from '../types';
+import { prefersReducedMotion } from '../hooks/useModal';
 
 interface LivingBackgroundProps {
   biome?: string;
@@ -27,6 +28,7 @@ const LivingBackground: React.FC<LivingBackgroundProps> = ({ biome = 'Unknown', 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    if (prefersReducedMotion()) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
@@ -36,6 +38,17 @@ const LivingBackground: React.FC<LivingBackgroundProps> = ({ biome = 'Unknown', 
     };
     window.addEventListener('resize', resize);
     resize();
+
+    // Pause the particle loop when the tab is hidden — avoids burning CPU
+    // and battery in a background tab.
+    let paused = document.hidden;
+    const onVisibility = () => {
+      paused = document.hidden;
+      if (!paused && animationRef.current === null) {
+        animationRef.current = requestAnimationFrame(update);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
 
     let particles: Particle[] = [];
     
@@ -221,6 +234,10 @@ const LivingBackground: React.FC<LivingBackgroundProps> = ({ biome = 'Unknown', 
           }
        });
 
+       if (paused) {
+          animationRef.current = null;
+          return;
+       }
        animationRef.current = requestAnimationFrame(update);
     };
 
@@ -228,7 +245,9 @@ const LivingBackground: React.FC<LivingBackgroundProps> = ({ biome = 'Unknown', 
 
     return () => {
        window.removeEventListener('resize', resize);
+       document.removeEventListener('visibilitychange', onVisibility);
        if (animationRef.current) cancelAnimationFrame(animationRef.current);
+       animationRef.current = null;
     };
   }, [biome, weather]);
 

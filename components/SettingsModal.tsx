@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AppSettings, ImageSize, TextModel, Language } from '../types';
 import { X, Settings, Globe, RefreshCcw, KeyRound } from 'lucide-react';
 import { clearApiKey, getApiKey, isStoredInLocalStorage, maskKey, setApiKey } from '../utils/apiKey';
+import { useModal } from '../hooks/useModal';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -15,6 +16,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
   const [editingKey, setEditingKey] = useState(false);
   const [draftKey, setDraftKey] = useState('');
   const [showKey, setShowKey] = useState(false);
+  const dialogRef = useModal<HTMLDivElement>(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -37,10 +39,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, settings
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div ref={dialogRef} tabIndex={-1} className="bg-slate-900 border border-slate-700 rounded-xl p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto outline-none">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-bold text-amber-500 flex items-center gap-2">
+          <h2 id="settings-title" className="text-xl font-bold text-amber-500 flex items-center gap-2">
             <Settings size={20} />
             Engine Settings
           </h2>

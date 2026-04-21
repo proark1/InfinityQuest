@@ -2,13 +2,91 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { AIResponse, AppSettings, Language, ImageSize, CharacterStats, InventoryItem, CharacterClass, Blessing, Reputation, Nemesis, SanctuaryState, Enemy, LocationInfo, Merchant, TextModel } from "../types";
 import { getApiKey } from "../utils/apiKey";
+import { USER_INPUT_CONTRACT, delimitUserAction } from "../utils/safety";
+
+export class GeminiError extends Error {
+  constructor(public readonly kind: 'missing-key' | 'rate-limit' | 'server' | 'network' | 'parse' | 'unknown', message: string) {
+    super(message);
+    this.name = 'GeminiError';
+  }
+}
+
+// Extract a short, user-safe summary from an unknown error. Never log raw error
+// objects — they can contain request URLs (with key) or auth headers in stacks.
+const summarizeError = (err: unknown): { kind: GeminiError['kind']; message: string } => {
+  const raw = err instanceof Error ? err.message : String(err);
+  const msg = raw.slice(0, 200);
+  const lower = msg.toLowerCase();
+  if (lower.includes('api key') || lower.includes('api_key') || lower.includes('permission')) {
+    return { kind: 'missing-key', message: 'API key is missing or unauthorized.' };
+  }
+  if (lower.includes('429') || lower.includes('rate') || lower.includes('quota') || lower.includes('resource exhausted')) {
+    return { kind: 'rate-limit', message: 'Rate-limited by Gemini. Slow down and try again.' };
+  }
+  if (lower.includes('5') && (lower.includes('500') || lower.includes('503') || lower.includes('internal'))) {
+    return { kind: 'server', message: 'Gemini had a hiccup. Try again in a moment.' };
+  }
+  if (lower.includes('fetch') || lower.includes('network') || lower.includes('offline')) {
+    return { kind: 'network', message: 'Network issue. Check your connection.' };
+  }
+  return { kind: 'unknown', message: msg || 'Unexpected error.' };
+};
+
+const logSafe = (scope: string, err: unknown) => {
+  const { kind, message } = summarizeError(err);
+  // eslint-disable-next-line no-console
+  console.warn(`[Gemini:${scope}] ${kind}: ${message}`);
+};
+
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+// Exponential backoff for transient failures (429/5xx/network). Non-transient
+// errors (missing key, parse) re-throw immediately so callers can react.
+async function withRetry<T>(scope: string, fn: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastKind: GeminiError['kind'] = 'unknown';
+  let lastMessage = 'Unknown error';
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const { kind, message } = summarizeError(err);
+      lastKind = kind;
+      lastMessage = message;
+      logSafe(scope, err);
+      if (kind === 'missing-key' || kind === 'parse') break;
+      if (attempt < attempts - 1) await sleep(2000 * Math.pow(2, attempt));
+    }
+  }
+  throw new GeminiError(lastKind, lastMessage);
+}
 
 const getAIClient = () => {
   const apiKey = getApiKey();
   if (!apiKey) {
-    throw new Error("Gemini API key not configured. Please add your key in Settings.");
+    throw new GeminiError('missing-key', 'Gemini API key not configured. Please add your key in Settings.');
   }
   return new GoogleGenAI({ apiKey });
+};
+
+// Lightweight in-memory cache for image generations. Keeps the last N entries
+// and evicts FIFO. Cuts Gemini image quota burn when the same scene/item
+// reappears across turns. Not persisted — images do not survive reloads.
+const IMAGE_CACHE_MAX = 48;
+const imageCache = new Map<string, string>();
+const cachedImage = (key: string): string | undefined => imageCache.get(key);
+const rememberImage = (key: string, url: string | null): void => {
+  if (!url) return;
+  if (imageCache.size >= IMAGE_CACHE_MAX) {
+    const oldest = imageCache.keys().next().value;
+    if (oldest !== undefined) imageCache.delete(oldest);
+  }
+  imageCache.set(key, url);
+};
+// Cheap deterministic hash for short strings (djb2). Used as cache key.
+const hashKey = (input: string): string => {
+  let h = 5381;
+  for (let i = 0; i < input.length; i++) h = ((h << 5) + h + input.charCodeAt(i)) | 0;
+  return `h${(h >>> 0).toString(36)}`;
 };
 
 const getSystemInstruction = (language: Language) => {
@@ -17,6 +95,8 @@ const getSystemInstruction = (language: Language) => {
   return `You are the Narrator and Rules Engine of INFINITY QUEST, a grounded fantasy RPG.
 Respond in ${lang}. Return strict JSON matching the schema — nothing else.
 Say "no" when the world says "no". The player's fun comes from constraints, not from getting everything they ask for.
+
+${USER_INPUT_CONTRACT}
 
 === REALISM CHARTER ===
 
@@ -188,7 +268,8 @@ const buildTurnPrompt = (a: TurnPromptArgs): string => {
       }).join(', ')
     : '(none yet)';
 
-  return `PLAYER ACTION: ${a.userAction}
+  return `PLAYER ACTION (untrusted — see trust boundary):
+${delimitUserAction(a.userAction)}
 
 --- CHARACTER ---
 Class: ${a.playerClass} | Level: ${a.level} (${a.currentXp}/${a.nextLevelXp} XP) | Act: ${a.currentAct} (${a.actProgress}%) | Ascension: ${a.ascensionLevel}
@@ -285,7 +366,7 @@ export const generateStoryTurn = async (
 
   const systemInstruction = getSystemInstruction(settings.language);
 
-  try {
+  return withRetry('story', async () => {
     const response = await ai.models.generateContent({
       model: modelName,
       contents: prompt,
@@ -436,14 +517,11 @@ export const generateStoryTurn = async (
     });
 
     const text = response.text;
-    if (!text) throw new Error("No text returned from Gemini");
+    if (!text) throw new GeminiError('parse', 'No text returned from Gemini.');
     return parseAIResponse(text, {
       currentInventory, currentQuest, currentStats, currentLevel, currentXp, nextLevelXp
     });
-  } catch (error) {
-    console.error("Error generating story:", error);
-    return fallbackAIResponse({ currentInventory, currentQuest, currentStats, currentLevel, currentXp, nextLevelXp });
-  }
+  });
 };
 
 interface FallbackContext {
@@ -455,36 +533,22 @@ interface FallbackContext {
   nextLevelXp: number;
 }
 
-const fallbackAIResponse = (ctx: FallbackContext): AIResponse => ({
-  narrative: "The world wavers...",
-  inventory: ctx.currentInventory,
-  currentQuest: ctx.currentQuest,
-  visualPrompt: "A glitch in reality.",
-  choices: ["Try again"],
-  stats: ctx.currentStats,
-  level: ctx.currentLevel,
-  currentXp: ctx.currentXp,
-  nextLevelXp: ctx.nextLevelXp,
-});
-
 const parseAIResponse = (raw: string, ctx: FallbackContext): AIResponse => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch (e) {
-    console.error("AI response was not valid JSON:", e);
-    return fallbackAIResponse(ctx);
+    logSafe('story:parse', e);
+    throw new GeminiError('parse', 'Narrator response was not valid JSON.');
   }
 
   if (!parsed || typeof parsed !== "object") {
-    console.error("AI response was not an object");
-    return fallbackAIResponse(ctx);
+    throw new GeminiError('parse', 'Narrator response was not an object.');
   }
 
   const obj = parsed as Record<string, unknown>;
   if (typeof obj.narrative !== "string" || !Array.isArray(obj.choices)) {
-    console.error("AI response missing required fields (narrative/choices)");
-    return fallbackAIResponse(ctx);
+    throw new GeminiError('parse', 'Narrator response missing required fields.');
   }
 
   const response = obj as unknown as AIResponse;
@@ -500,9 +564,13 @@ const parseAIResponse = (raw: string, ctx: FallbackContext): AIResponse => {
 };
 
 export const generateSceneImage = async (
-  visualPrompt: string, 
+  visualPrompt: string,
   size: ImageSize
 ): Promise<string | null> => {
+  const cacheKey = `scene:${size}:${hashKey(visualPrompt)}`;
+  const hit = cachedImage(cacheKey);
+  if (hit) return hit;
+
   const ai = getAIClient();
   try {
     const response = await ai.models.generateContent({
@@ -511,11 +579,15 @@ export const generateSceneImage = async (
       config: { imageConfig: { aspectRatio: "16:9", imageSize: size } }
     });
     for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+      if (part.inlineData) {
+        const url = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        rememberImage(cacheKey, url);
+        return url;
+      }
     }
     return null;
   } catch (error) {
-    console.error("Scene image generation failed:", error);
+    logSafe('scene-image', error);
     return null;
   }
 };
@@ -540,12 +612,16 @@ export const generateItemDetails = async (item: InventoryItem): Promise<{ lore: 
       if (part.inlineData) imageUrl = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
     }
   } catch (e) {
-    console.error("Item details generation failed:", e);
+    logSafe('item-details', e);
   }
   return { lore, imageUrl };
 };
 
 export const generateMapImage = async (locationName: string, biome: string): Promise<string | null> => {
+  const cacheKey = `map:${hashKey(`${locationName}|${biome}`)}`;
+  const hit = cachedImage(cacheKey);
+  if (hit) return hit;
+
   const ai = getAIClient();
   try {
     const response = await ai.models.generateContent({
@@ -554,16 +630,24 @@ export const generateMapImage = async (locationName: string, biome: string): Pro
       config: { imageConfig: { aspectRatio: "16:9", imageSize: "1K" } }
     });
     for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+      if (part.inlineData) {
+        const url = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        rememberImage(cacheKey, url);
+        return url;
+      }
     }
     return null;
   } catch (error) {
-    console.error("Map image generation failed:", error);
+    logSafe('map-image', error);
     return null;
   }
 };
 
 export const generateEnemyImage = async (description: string): Promise<string | null> => {
+  const cacheKey = `enemy:${hashKey(description)}`;
+  const hit = cachedImage(cacheKey);
+  if (hit) return hit;
+
   const ai = getAIClient();
   try {
     const response = await ai.models.generateContent({
@@ -572,16 +656,24 @@ export const generateEnemyImage = async (description: string): Promise<string | 
       config: { imageConfig: { aspectRatio: "1:1", imageSize: "1K" } }
     });
     for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+      if (part.inlineData) {
+        const url = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        rememberImage(cacheKey, url);
+        return url;
+      }
     }
     return null;
   } catch (error) {
-    console.error("Enemy image generation failed:", error);
+    logSafe('enemy-image', error);
     return null;
   }
 };
 
 export const generateCharacterImage = async (portraitPrompt: string): Promise<string | null> => {
+  const cacheKey = `character:${hashKey(portraitPrompt)}`;
+  const hit = cachedImage(cacheKey);
+  if (hit) return hit;
+
   const ai = getAIClient();
   try {
     const response = await ai.models.generateContent({
@@ -590,11 +682,15 @@ export const generateCharacterImage = async (portraitPrompt: string): Promise<st
       config: { imageConfig: { aspectRatio: "1:1", imageSize: "1K" } }
     });
     for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+      if (part.inlineData) {
+        const url = `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        rememberImage(cacheKey, url);
+        return url;
+      }
     }
     return null;
   } catch (error) {
-    console.error("Character image generation failed:", error);
+    logSafe('character-image', error);
     return null;
   }
 };
@@ -630,7 +726,7 @@ export const generateAudio = async (text: string, voiceName: string = 'Kore'): P
     }
     return null;
   } catch (error) {
-    console.error("Audio generation error:", error);
+    logSafe('audio', error);
     return null;
   }
 };

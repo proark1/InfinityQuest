@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { InventoryItem } from '../types';
 import { Flame, X, Utensils, Droplets, Heart, Moon } from 'lucide-react';
 import { SoundManager } from '../utils/soundEffects';
+import { useModal } from '../hooks/useModal';
 
 interface CampModalProps {
   isOpen: boolean;
@@ -36,6 +37,7 @@ const CampModal: React.FC<CampModalProps> = ({ isOpen, onClose, inventory, onCon
 
   const [selectedFood, setSelectedFood] = React.useState<string>('');
   const [selectedDrink, setSelectedDrink] = React.useState<string>('');
+  const dialogRef = useModal<HTMLDivElement>(isOpen, onClose);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -49,9 +51,11 @@ const CampModal: React.FC<CampModalProps> = ({ isOpen, onClose, inventory, onCon
   const canCamp = !!selectedFood && !!selectedDrink;
 
   return (
-    <div className="fixed inset-0 z-[80] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={onClose}>
+    <div className="fixed inset-0 z-[80] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="camp-title">
       <div
-        className="bg-slate-900 border-2 border-amber-700/50 rounded-[2rem] p-8 w-full max-w-md shadow-2xl relative"
+        ref={dialogRef}
+        tabIndex={-1}
+        className="bg-slate-900 border-2 border-amber-700/50 rounded-[2rem] p-8 w-full max-w-md shadow-2xl relative outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -66,7 +70,7 @@ const CampModal: React.FC<CampModalProps> = ({ isOpen, onClose, inventory, onCon
           <div className="inline-flex p-4 bg-amber-900/30 border border-amber-600/40 rounded-full mb-3">
             <Flame className="text-amber-500 animate-pulse" size={32} />
           </div>
-          <h2 className="text-2xl font-black text-amber-500 fantasy-font uppercase tracking-widest">Make Camp</h2>
+          <h2 id="camp-title" className="text-2xl font-black text-amber-500 fantasy-font uppercase tracking-widest">Make Camp</h2>
           <p className="text-slate-400 text-sm mt-2">Rest for a few hours. Cook a meal. Restore your vigor.</p>
         </div>
 

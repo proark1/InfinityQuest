@@ -94,4 +94,4 @@ const VisualEffectsLayer: React.FC<VisualEffectsLayerProps> = ({ gameState }) =>
   );
 };
 
-export default VisualEffectsLayer;
+export default React.memo(VisualEffectsLayer);

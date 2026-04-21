@@ -65,8 +65,15 @@ const LootReveal: React.FC<LootRevealProps> = ({ items, onClose }) => {
       <div className="relative z-10 w-full max-w-2xl text-center">
         
         {stage === 'closed' && (
-          <div className="cursor-pointer group transform transition-all hover:scale-105" onClick={handleOpen} onMouseEnter={() => SoundManager.playHover()}>
-             <div className="relative inline-block">
+          <button
+            type="button"
+            onClick={handleOpen}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpen(); } }}
+            onMouseEnter={() => SoundManager.playHover()}
+            aria-label={`Open chest containing ${items.length} item${items.length === 1 ? '' : 's'}`}
+            className="cursor-pointer group transform transition-all hover:scale-105 active:scale-95 bg-transparent border-0 p-6 min-h-[44px] min-w-[44px]"
+          >
+             <div className="relative inline-block animate-pulse">
                 <Package size={128} strokeWidth={1} className="text-amber-500 drop-shadow-[0_0_30px_rgba(245,158,11,0.5)] group-hover:drop-shadow-[0_0_50px_rgba(245,158,11,0.8)] transition-all" />
                 <div className="absolute -top-4 -right-4 animate-bounce">
                    <div className="bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full border border-red-400 shadow-lg">
@@ -74,8 +81,8 @@ const LootReveal: React.FC<LootRevealProps> = ({ items, onClose }) => {
                    </div>
                 </div>
              </div>
-             <h2 className="text-2xl font-bold text-white mt-8 fantasy-font animate-pulse">Click to Open</h2>
-          </div>
+             <h2 className="text-2xl font-bold text-white mt-8 fantasy-font">Tap to Open</h2>
+          </button>
         )}
 
         {stage === 'opening' && (
@@ -90,8 +97,8 @@ const LootReveal: React.FC<LootRevealProps> = ({ items, onClose }) => {
              
              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {items.map((item, idx) => (
-                   <div 
-                     key={idx}
+                   <div
+                     key={`${item.name}-${idx}`}
                      className={`transform transition-all duration-500 ${idx < revealedCount ? 'scale-100 opacity-100 translate-y-0' : 'scale-50 opacity-0 translate-y-10'}`}
                    >
                       <div className={`p-6 rounded-xl border-2 flex flex-col items-center gap-3 relative overflow-hidden group hover:scale-105 transition-transform bg-gradient-to-br shadow-[0_0_20px_rgba(0,0,0,0.3)] ${getRarityColor(item.rarity)} ${getRarityBg(item.rarity)}`}>

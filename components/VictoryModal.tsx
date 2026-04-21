@@ -25,7 +25,7 @@ const VictoryModal: React.FC<VictoryModalProps> = ({ isOpen, gameState, onAscend
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-1000">
+    <div className="fixed inset-0 bg-black/95 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-1000" role="dialog" aria-modal="true" aria-labelledby="victory-title">
       <div className="max-w-lg w-full bg-slate-900 border border-amber-500/50 rounded-2xl p-8 text-center relative overflow-hidden shadow-[0_0_50px_rgba(245,158,11,0.2)]">
         {/* Background Effects */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-amber-500/10 via-slate-900/50 to-slate-950 pointer-events-none" />
@@ -35,7 +35,7 @@ const VictoryModal: React.FC<VictoryModalProps> = ({ isOpen, gameState, onAscend
              <Crown size={48} className="text-white" />
           </div>
           
-          <h1 className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-300 fantasy-font uppercase tracking-widest mb-2">
+          <h1 id="victory-title" className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-300 fantasy-font uppercase tracking-widest mb-2">
              Victory
           </h1>
           

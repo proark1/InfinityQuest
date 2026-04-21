@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { GameState, Language, ItemRarity, InventoryItem } from '../types';
 import { Backpack, BicepsFlexed, Brain, Activity, Trophy, Zap, Sword, Book, MapPin, Skull, Heart, Hammer, Sparkles, Utensils, Droplets, Flame, Coins, Medal, Flag, User, Eye, Shield, Gem } from 'lucide-react';
 import { SoundManager } from '../utils/soundEffects';
+import { isSafeImageUrl } from '../utils/safety';
 
 interface SidebarProps {
   gameState: GameState;
@@ -64,11 +65,11 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, className = '', language, 
         
         <div className={`relative bg-slate-900 rounded-[1rem] border-2 shadow-2xl transition-all duration-700 overflow-hidden mx-auto max-w-[130px] ${isPlayerTurn ? 'border-amber-500 ring-2 ring-amber-500/10 scale-[1.02]' : 'border-slate-800'}`}>
            <div className="aspect-[4/5] w-full relative">
-              {gameState.portraitUrl ? (
-                <img 
-                  src={gameState.portraitUrl} 
-                  alt="Hero Avatar" 
-                  className={`w-full h-full object-cover transition-transform duration-1000 ${isPlayerTurn ? 'scale-110' : 'scale-100'}`} 
+              {isSafeImageUrl(gameState.portraitUrl) ? (
+                <img
+                  src={gameState.portraitUrl}
+                  alt="Hero Avatar"
+                  className={`w-full h-full object-cover transition-transform duration-1000 ${isPlayerTurn ? 'scale-110' : 'scale-100'}`}
                 />
               ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-slate-800 gap-2">
@@ -259,8 +260,8 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, className = '', language, 
                   {gameState.inventory.map((item, index) => {
                     const isSelected = selectedCraftItems.includes(item);
                     return (
-                      <li 
-                        key={index} 
+                      <li
+                        key={`${item.name}-${index}`}
                         onClick={() => {
                           if (isCraftingMode) {
                              if (isSelected) setSelectedCraftItems(prev => prev.filter(i => i !== item));
@@ -313,10 +314,10 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, className = '', language, 
                 <div className="text-slate-700 text-[8px] text-center py-10 uppercase tracking-[0.2em] font-black italic opacity-40">No abilities learned...</div>
               ) : (
                 <ul className="space-y-2">
-                  {gameState.abilities.map((ability, index) => (
-                    <li key={index} className="border border-slate-700 bg-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
+                  {gameState.abilities.map((ability) => (
+                    <li key={ability.name} className="border border-slate-700 bg-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
                       <div className="font-black text-white text-[11px] leading-tight">{ability.name}</div>
-                      <div className="text-[9px] text-slate-400 leading-relaxed">{ability.description}</div>
+                      <div className="text-[9px] text-slate-400 leading-relaxed line-clamp-3" title={ability.description}>{ability.description}</div>
                     </li>
                   ))}
                 </ul>
@@ -337,8 +338,8 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, className = '', language, 
                 <div className="text-slate-700 text-[8px] text-center py-10 uppercase tracking-[0.2em] font-black italic opacity-40">Codex empty...</div>
               ) : (
                 <ul className="space-y-2">
-                  {gameState.codex.map((entry, index) => (
-                    <li key={index} className="border border-slate-700 bg-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
+                  {gameState.codex.map((entry) => (
+                    <li key={entry.id ?? entry.name} className="border border-slate-700 bg-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
                       <div className="flex justify-between items-center">
                         <div className="font-black text-white text-[11px] leading-tight">{entry.name}</div>
                         <div className="text-[7px] font-black uppercase tracking-tighter text-purple-400">{entry.category}</div>
@@ -364,8 +365,8 @@ const Sidebar: React.FC<SidebarProps> = ({ gameState, className = '', language, 
                 <div className="text-slate-700 text-[8px] text-center py-10 uppercase tracking-[0.2em] font-black italic opacity-40">No factions known...</div>
               ) : (
                 <ul className="space-y-2">
-                  {gameState.reputation.map((rep, index) => (
-                    <li key={index} className="border border-slate-700 bg-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
+                  {gameState.reputation.map((rep) => (
+                    <li key={rep.faction} className="border border-slate-700 bg-slate-800/50 rounded-xl p-3 flex flex-col gap-1">
                       <div className="flex justify-between items-center">
                         <div className="font-black text-white text-[11px] leading-tight">{rep.faction}</div>
                         <div className={`text-[9px] font-black uppercase tracking-tighter ${
@@ -416,4 +417,4 @@ const EquipSlotBox: React.FC<{ label: string; name?: string; icon: React.ReactNo
    </div>
 );
 
-export default Sidebar;
+export default React.memo(Sidebar);
